@@ -1,5 +1,5 @@
 # Let Netlify/ACME hit the challenge path without redirects
-/.well-known/acme-challenge/*  /.well-known/acme-challenge/:splat  200
+
 
 # (Optional) your canonical redirects can go AFTER this line later
 # Example to force www later:
