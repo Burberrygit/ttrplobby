@@ -12,29 +12,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Show repo tree (root)
+        run: |
+          pwd
+          ls -la
+          echo "---- .github/workflows ----"
+          ls -la .github/workflows || true
+          echo "---- frontend ----"
+          ls -la frontend || true
+          echo "---- frontend/src/app ----"
+          ls -la frontend/src/app || true
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend/package.json  # no lockfile
+          cache-dependency-path: frontend/package.json
 
+      - name: Node & npm versions
+        run: |
+          node -v
+          npm -v
+
+      # Try npm ci; if there's no lockfile, fall back to npm install
       - name: Install deps
         working-directory: frontend
-        run: npm install
+        run: |
+          echo "Contents of frontend before install:"
+          ls -la
+          echo "Attempting npm ci (will fall back to npm install if lockfile missing)..."
+          npm ci || npm install
+
+      - name: Confirm deps installed
+        working-directory: frontend
+        run: |
+          test -d node_modules && echo "node_modules present" || (echo "node_modules missing" && exit 1)
+          cat package.json
 
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      # Run Netlify's Next.js plugin locally (no Netlify build minutes)
-      - name: Netlify Build
+      # Runs @netlify/plugin-nextjs locally so you use ZERO Netlify build minutes
+      - name: Netlify Build (with plugin)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: netlify build --context production --debug
+        run: |
+          echo "Using netlify.toml in repo root. Running netlify build..."
+          netlify build --context production --debug
+
+      - name: Show Netlify build output
+        run: |
+          echo "---- .netlify/build ----"
+          ls -la .netlify/build || true
+          echo "---- .netlify/functions ----"
+          ls -la .netlify/functions || true
 
       - name: Deploy to Netlify (prod)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-
+        run: |
+          netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
