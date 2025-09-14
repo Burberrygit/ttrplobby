@@ -1,7 +1,3 @@
-# Let Netlify/ACME hit the challenge path without redirects
-
-
-# (Optional) your canonical redirects can go AFTER this line later
-# Example to force www later:
-# http://ttrplobby.com/*   https://www.ttrplobby.com/:splat   301!
-# https://ttrplobby.com/*  https://www.ttrplobby.com/:splat   301!
+# Prefer www
+http://ttrplobby.com/*   https://www.ttrplobby.com/:splat   301!
+https://ttrplobby.com/*  https://www.ttrplobby.com/:splat   301!
