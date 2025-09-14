@@ -12,16 +12,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show repo tree
+      - name: Show repo tree (pre-install)
         run: |
+          echo "PWD:"
           pwd
+          echo "ROOT:"
           ls -la
-          echo "---- .github/workflows ----"
-          ls -la .github/workflows || true
-          echo "---- frontend ----"
+          echo "frontend/:"
           ls -la frontend || true
-          echo "---- frontend/src/app ----"
-          ls -la frontend/src/app || true
+          echo "frontend/package-lock.json exists?"
+          test -f frontend/package-lock.json && echo "YES" || echo "NO"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -35,20 +35,26 @@ jobs:
           node -v
           npm -v
 
-      - name: Install deps (uses lockfile)
-        working-directory: frontend
-        run: npm ci
+      # Try ci if lockfile present; otherwise fall back to install
+      - name: Install deps (ci OR install)
+        run: |
+          if [ -f frontend/package-lock.json ]; then
+            echo "Using npm ci (lockfile present)"
+            cd frontend && npm ci
+          else
+            echo "Lockfile missing; using npm install"
+            cd frontend && npm install
+          fi
 
       - name: Verify deps
-        working-directory: frontend
         run: |
-          test -d node_modules && echo "node_modules present" || (echo "node_modules missing" && exit 1)
-          jq -r '.scripts' package.json
+          test -d frontend/node_modules && echo "node_modules present" || (echo "node_modules missing" && exit 1)
+          cat frontend/package.json | jq -r '.scripts'
 
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      # Run Netlify’s Next.js plugin locally (uses netlify.toml at REPO ROOT)
+      # Runs @netlify/plugin-nextjs locally using netlify.toml at repo root
       - name: Netlify Build (with plugin)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -56,9 +62,9 @@ jobs:
 
       - name: Show Netlify build output
         run: |
-          echo "---- .netlify/build ----"
+          echo ".netlify/build:"
           ls -la .netlify/build || true
-          echo "---- .netlify/functions ----"
+          echo ".netlify/functions:"
           ls -la .netlify/functions || true
 
       - name: Deploy to Netlify (prod)
