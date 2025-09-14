@@ -5,3 +5,10 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# ACME: always allow HTTP-01 challenge through with 200
+[[redirects]]
+  from = "/.well-known/acme-challenge/*"
+  to = "/.well-known/acme-challenge/:splat"
+  status = 200
+  force = true
