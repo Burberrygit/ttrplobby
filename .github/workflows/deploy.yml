@@ -1,4 +1,4 @@
-name: Build & Deploy to Netlify (Plugin Build, verbose)
+name: Build & Deploy to Netlify (Plugin Build, non-interactive)
 
 on:
   push:
@@ -33,16 +33,13 @@ jobs:
           node -v
           npm -v
 
-      # Install in /frontend. Use npm ci when lockfile exists; otherwise fall back to npm install.
       - name: Install deps (ci OR install)
         working-directory: frontend
         run: |
           set -euxo pipefail
           if [ -f package-lock.json ]; then
-            echo "Using npm ci"
             npm ci
           else
-            echo "Lockfile missing; using npm install"
             npm install
           fi
           test -d node_modules && echo "node_modules present"
@@ -50,31 +47,25 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      # Link this checkout to your Netlify project so CLI knows the Site ID
-      - name: Netlify Link (write .netlify/state.json)
+      # ✅ Write the Netlify state file instead of running `netlify link` (no interactive login)
+      - name: Write Netlify state (no interactive login)
         env:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          netlify link --id "$NETLIFY_SITE_ID"
+          mkdir -p .netlify
+          printf '{ "siteId": "%s" }\n' "$NETLIFY_SITE_ID" > .netlify/state.json
           cat .netlify/state.json
 
-      # Run Netlify's Next.js plugin locally (uses netlify.toml at repo ROOT)
+      # Run the Netlify Next.js plugin locally (uses netlify.toml at repo root)
       - name: Netlify Build (with @netlify/plugin-nextjs)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          netlify status || true
-          # netlify.toml at root:
-          # [build]
-          #   base = "frontend"
-          #   command = "npm run build"
-          #   publish = ".next"
-          # [[plugins]]
-          #   package = "@netlify/plugin-nextjs"
-          netlify build --context production --debug
+          # Pass auth explicitly to avoid header parsing issues
+          netlify build --auth "$NETLIFY_AUTH_TOKEN" --context production --debug
 
       - name: Show Netlify build output
         run: |
@@ -90,4 +81,4 @@ jobs:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          netlify deploy --auth "$NETLIFY_AUTH_TOKEN" --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
