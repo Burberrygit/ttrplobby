@@ -33,7 +33,7 @@ jobs:
           node -v
           npm -v
 
-      # Install in /frontend. Use npm ci if lockfile is there; else fall back to npm install.
+      # Install in /frontend. Use npm ci when lockfile exists; otherwise fall back to npm install.
       - name: Install deps (ci OR install)
         working-directory: frontend
         run: |
@@ -50,13 +50,30 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      # Run Netlify's Next.js plugin LOCALLY (uses netlify.toml at repo ROOT)
+      # Link this checkout to your Netlify project so CLI knows the Site ID
+      - name: Netlify Link (write .netlify/state.json)
+        env:
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          set -euxo pipefail
+          netlify link --id "$NETLIFY_SITE_ID"
+          cat .netlify/state.json
+
+      # Run Netlify's Next.js plugin locally (uses netlify.toml at repo ROOT)
       - name: Netlify Build (with @netlify/plugin-nextjs)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          # netlify.toml at root has: base="frontend", command="npm run build", publish=".next"
+          netlify status || true
+          # netlify.toml at root:
+          # [build]
+          #   base = "frontend"
+          #   command = "npm run build"
+          #   publish = ".next"
+          # [[plugins]]
+          #   package = "@netlify/plugin-nextjs"
           netlify build --context production --debug
 
       - name: Show Netlify build output
