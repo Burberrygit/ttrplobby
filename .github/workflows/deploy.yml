@@ -1,4 +1,4 @@
-name: Build & Deploy to Netlify (Plugin Build, non-interactive)
+name: Build & Deploy to Netlify (Plugin Build, trimmed secrets)
 
 on:
   push:
@@ -47,38 +47,47 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      # ✅ Write the Netlify state file instead of running `netlify link` (no interactive login)
-      - name: Write Netlify state (no interactive login)
+      - name: Normalize Netlify secrets
+        id: norm
         env:
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          RAW_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          RAW_TOKEN:   ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           set -euxo pipefail
-          mkdir -p .netlify
-          printf '{ "siteId": "%s" }\n' "$NETLIFY_SITE_ID" > .netlify/state.json
-          cat .netlify/state.json
+          SITE_ID_TRIMMED="$(printf '%s' "${RAW_SITE_ID}" | tr -d '\r\n')"
+          TOKEN_TRIMMED="$(printf '%s' "${RAW_TOKEN}"   | tr -d '\r\n')"
+          echo "SITE_ID=${SITE_ID_TRIMMED}" >> $GITHUB_OUTPUT
+          echo "TOKEN=${TOKEN_TRIMMED}"     >> $GITHUB_OUTPUT
+          echo "Site ID length: ${#SITE_ID_TRIMMED}"
+          echo "Token length: ${#TOKEN_TRIMMED}"
 
-      # Run the Netlify Next.js plugin locally (uses netlify.toml at repo root)
+      # Build USING the plugin (this generates frontend/.next + plugin outputs)
       - name: Netlify Build (with @netlify/plugin-nextjs)
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ steps.norm.outputs.TOKEN }}
+          NETLIFY_SITE_ID:    ${{ steps.norm.outputs.SITE_ID }}
         run: |
           set -euxo pipefail
-          # Pass auth explicitly to avoid header parsing issues
-          netlify build --auth "$NETLIFY_AUTH_TOKEN" --context production --debug
+          netlify build --auth "${NETLIFY_AUTH_TOKEN}" --context production --debug
 
-      - name: Show Netlify build output
+      - name: Show build results
         run: |
           set -euxo pipefail
-          echo "---- .netlify/build ----"
-          ls -la .netlify/build || true
-          echo "---- .netlify/functions ----"
+          echo "frontend/.next:"
+          ls -la frontend/.next || true
+          echo ".netlify:"
+          ls -la .netlify || true
+          echo ".netlify/functions:"
           ls -la .netlify/functions || true
+          echo ".netlify/build (may not exist when using deploy-from-publish):"
+          ls -la .netlify/build || true
 
+      # ✅ Deploy the publish directory defined in netlify.toml (frontend/.next)
       - name: Deploy to Netlify (prod)
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ steps.norm.outputs.TOKEN }}
+          NETLIFY_SITE_ID:    ${{ steps.norm.outputs.SITE_ID }}
         run: |
           set -euxo pipefail
-          netlify deploy --auth "$NETLIFY_AUTH_TOKEN" --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          netlify deploy --auth "${NETLIFY_AUTH_TOKEN}" --prod --dir "frontend/.next" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
