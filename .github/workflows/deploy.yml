@@ -8,22 +8,16 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
-    # you likely already have this; it's fine to keep it
-    defaults:
-      run:
-        working-directory: frontend
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show repo tree (pre-install)
+      - name: Show repo tree
         run: |
           echo "PWD:" && pwd
-          echo "ROOT:" && ls -la ..
-          echo "FRONTEND:" && ls -la .
-          echo "Lockfile exists?"; test -f package-lock.json && echo YES || echo NO
+          echo "--- ROOT ---" && ls -la
+          echo "--- frontend ---" && ls -la frontend || true
+          echo "Lockfile present?" && (test -f frontend/package-lock.json && echo YES || echo NO)
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -37,34 +31,39 @@ jobs:
           node -v
           npm -v
 
-      # ⬇️ This is the important change
       - name: Install deps (ci OR install)
         run: |
-          if [ -f package-lock.json ]; then
-            echo "Using npm ci (lockfile present)"
-            npm ci
+          if [ -f frontend/package-lock.json ]; then
+            echo "Using npm ci"
+            cd frontend && npm ci
           else
             echo "Lockfile missing; using npm install"
-            npm install
+            cd frontend && npm install
           fi
+
+      - name: Verify deps
+        run: |
+          test -d frontend/node_modules && echo "node_modules present" || (echo "node_modules missing" && exit 1)
+          head -n 50 frontend/package.json || true
 
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      - name: Netlify Build (with plugin)
+      # netlify.toml is at repo ROOT, so run from root (no cd)
+      - name: Netlify Build (runs @netlify/plugin-nextjs locally)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        # netlify.toml is at repo root, so go up one level for the build
-        working-directory: .
+        run: netlify build --context production --debug
+
+      - name: Show Netlify build output
         run: |
-          cd ..
-          netlify build --context production --debug
+          echo "---- .netlify/build ----"
+          ls -la .netlify/build || true
+          echo "---- .netlify/functions ----"
+          ls -la .netlify/functions || true
 
       - name: Deploy to Netlify (prod)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        working-directory: .
-        run: |
-          cd ..
-          netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        run: netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
