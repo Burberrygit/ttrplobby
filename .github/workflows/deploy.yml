@@ -17,11 +17,11 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend/package.json  # no lockfile yet
 
       - name: Install deps
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
       - name: Preflight: tree
         run: |
@@ -32,38 +32,22 @@ jobs:
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      - name: Netlify Auth Check
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: netlify status || true
-
-      # IMPORTANT: runs the Netlify Next.js plugin locally (no Netlify minutes)
       - name: Netlify Build (runs framework plugin)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: |
-          netlify build --context production --debug
-        # netlify.toml at repo root should have:
-        # [build]
-        #   base = "frontend"
-        #   command = "npm run build"
-        #   publish = ".next"
-        # [[plugins]]
-        #   package = "@netlify/plugin-nextjs"
+        run: netlify build --context production --debug
 
       - name: Show Netlify build output
         run: |
           echo "---- .netlify/build/ ----"
           ls -la .netlify/build || true
-          echo "---- .netlify/ functions ----"
+          echo "---- .netlify/functions ----"
           ls -la .netlify/functions || true
 
       - name: Deploy to Netlify (prod)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: |
-          # The netlify build command prints a 'Directory' line with the publish path.
-          # For Next.js, it's usually ".netlify/build".
-          netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        run: netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
 
