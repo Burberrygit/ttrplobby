@@ -1,4 +1,4 @@
-name: Build & Deploy to Netlify (Plugin Build)
+name: Build & Deploy to Netlify (Plugin Build, verbose)
 
 on:
   push:
@@ -12,8 +12,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show repo tree
+      - name: Show repo tree (pre-install)
         run: |
+          set -euxo pipefail
           echo "PWD:" && pwd
           echo "--- ROOT ---" && ls -la
           echo "--- frontend ---" && ls -la frontend || true
@@ -28,35 +29,39 @@ jobs:
 
       - name: Node & npm versions
         run: |
+          set -euxo pipefail
           node -v
           npm -v
 
+      # Install in /frontend. Use npm ci if lockfile is there; else fall back to npm install.
       - name: Install deps (ci OR install)
+        working-directory: frontend
         run: |
-          if [ -f frontend/package-lock.json ]; then
+          set -euxo pipefail
+          if [ -f package-lock.json ]; then
             echo "Using npm ci"
-            cd frontend && npm ci
+            npm ci
           else
             echo "Lockfile missing; using npm install"
-            cd frontend && npm install
+            npm install
           fi
-
-      - name: Verify deps
-        run: |
-          test -d frontend/node_modules && echo "node_modules present" || (echo "node_modules missing" && exit 1)
-          head -n 50 frontend/package.json || true
+          test -d node_modules && echo "node_modules present"
 
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
 
-      # netlify.toml is at repo ROOT, so run from root (no cd)
-      - name: Netlify Build (runs @netlify/plugin-nextjs locally)
+      # Run Netlify's Next.js plugin LOCALLY (uses netlify.toml at repo ROOT)
+      - name: Netlify Build (with @netlify/plugin-nextjs)
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: netlify build --context production --debug
+        run: |
+          set -euxo pipefail
+          # netlify.toml at root has: base="frontend", command="npm run build", publish=".next"
+          netlify build --context production --debug
 
       - name: Show Netlify build output
         run: |
+          set -euxo pipefail
           echo "---- .netlify/build ----"
           ls -la .netlify/build || true
           echo "---- .netlify/functions ----"
@@ -66,4 +71,6 @@ jobs:
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        run: |
+          set -euxo pipefail
+          netlify deploy --prod --dir ".netlify/build" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
