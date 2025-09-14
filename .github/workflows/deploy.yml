@@ -1,4 +1,4 @@
-name: Build & Deploy to Netlify (Plugin Build, trimmed secrets)
+name: Build & Deploy to Netlify (Plugin Build, cached)
 
 on:
   push:
@@ -20,12 +20,32 @@ jobs:
           echo "--- frontend ---" && ls -la frontend || true
           echo "Lockfile present?" && (test -f frontend/package-lock.json && echo YES || echo NO)
 
-      - name: Setup Node
+      - name: Setup Node (use npm cache)
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
+
+      # Restore Next.js incremental build cache
+      - name: Restore Next.js cache
+        uses: actions/cache@v4
+        with:
+          path: frontend/.next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ github.ref_name }}
+          restore-keys: |
+            next-cache-${{ runner.os }}-${{ github.ref_name }}-
+            next-cache-${{ runner.os }}-
+
+      # Restore Netlify Next.js runtime cache
+      - name: Restore Netlify cache
+        uses: actions/cache@v4
+        with:
+          path: .netlify/cache
+          key: netlify-cache-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ github.ref_name }}
+          restore-keys: |
+            netlify-cache-${{ runner.os }}-${{ github.ref_name }}-
+            netlify-cache-${{ runner.os }}-
 
       - name: Node & npm versions
         run: |
@@ -61,7 +81,6 @@ jobs:
           echo "Site ID length: ${#SITE_ID_TRIMMED}"
           echo "Token length: ${#TOKEN_TRIMMED}"
 
-      # Build USING the plugin (this generates frontend/.next + plugin outputs)
       - name: Netlify Build (with @netlify/plugin-nextjs)
         env:
           NETLIFY_AUTH_TOKEN: ${{ steps.norm.outputs.TOKEN }}
@@ -79,10 +98,9 @@ jobs:
           ls -la .netlify || true
           echo ".netlify/functions:"
           ls -la .netlify/functions || true
-          echo ".netlify/build (may not exist when using deploy-from-publish):"
-          ls -la .netlify/build || true
+          echo ".netlify/cache:"
+          ls -la .netlify/cache || true
 
-      # ✅ Deploy the publish directory defined in netlify.toml (frontend/.next)
       - name: Deploy to Netlify (prod)
         env:
           NETLIFY_AUTH_TOKEN: ${{ steps.norm.outputs.TOKEN }}
