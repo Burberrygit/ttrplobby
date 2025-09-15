@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function LoginPage() {
@@ -7,9 +8,34 @@ export default function LoginPage() {
   const [status, setStatus] = useState('')
   const [user, setUser] = useState<any>(null)
 
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  // After auth, go to ?next=… or fallback to sessionStorage or /profile
+  function redirectPostAuth() {
+    const nextFromUrl = searchParams?.get('next')
+    const nextFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') : null
+    const dest = nextFromUrl || nextFromStorage || '/profile'
+    if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
+    router.replace(dest)
+  }
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user))
-  }, [])
+    // Store ?next=… so OAuth/magic-link roundtrips can pick it back up
+    const n = searchParams?.get('next')
+    if (typeof window !== 'undefined' && n) {
+      sessionStorage.setItem('nextAfterLogin', n)
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user)
+      if (data.user) redirectPostAuth()
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session?.user) redirectPostAuth()
+    })
+    return () => { sub.subscription.unsubscribe() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -57,16 +83,22 @@ export default function LoginPage() {
             <div className="mt-4 space-y-2">
               <button
                 onClick={()=>handleOAuth('google')}
-                className="w-full px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700"
+                className="w-full px-3 py-2 rounded-md bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-200"
               >
                 Continue with Google
               </button>
               <button
                 onClick={()=>handleOAuth('discord')}
-                className="w-full px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700"
+                className="w-full px-3 py-2 rounded-md bg-[#5865F2] hover:bg-[#4752C4] text-white"
               >
                 Continue with Discord
               </button>
+            </div>
+
+            <div className="mt-4">
+              <a href="/signup" className="w-full inline-block text-center px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 font-medium">
+                Sign up
+              </a>
             </div>
           </>
         )}
