@@ -1,3 +1,4 @@
+// File: frontend/src/app/signup/SignupClient.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -37,7 +38,7 @@ export default function SignupClient() {
     // Magic link also creates the account
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin }
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
     })
     setStatus(error ? error.message : 'Check your inbox to finish creating your account.')
   }
@@ -45,7 +46,7 @@ export default function SignupClient() {
   async function handleOAuth(provider: 'google' | 'discord') {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: `${window.location.origin}/auth/callback` }
     })
     if (error) setStatus(error.message)
   }
