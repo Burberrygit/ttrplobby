@@ -34,6 +34,7 @@ export default function SignupClient() {
 
   async function handleEmailSignup(e: React.FormEvent) {
     e.preventDefault()
+    // Magic link also creates the account
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: window.location.origin }
@@ -50,51 +51,73 @@ export default function SignupClient() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100">
-      <div className="bg-zinc-900 p-6 rounded-xl shadow-xl w-full max-w-md">
-        <h1 className="text-xl font-bold mb-4">Create your ttrplobby account</h1>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* Banner/header like landing page */}
+      <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between relative z-50">
+          <a href="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="ttrplobby logo" className="h-6 w-6 rounded" />
+            <span className="font-bold text-lg tracking-tight">ttrplobby</span>
+          </a>
+        </div>
+      </header>
 
-        {user ? (
-          <p>Signed in as {user.email}</p>
-        ) : (
-          <>
-            <form onSubmit={handleEmailSignup} className="space-y-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e)=>setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700"
-                required
-              />
-              <button type="submit" className="w-full px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 font-medium">
-                Send magic link
-              </button>
-            </form>
+      {/* Page content */}
+      <div className="min-h-[calc(100vh-65px)] flex items-center justify-center px-4">
+        <div className="bg-zinc-900 p-6 rounded-xl shadow-xl w-full max-w-md">
+          <h1 className="text-xl font-bold mb-4">Create your ttrplobby account</h1>
 
-            <div className="mt-4 space-y-2">
-              <button
-                onClick={()=>handleOAuth('google')}
-                className="w-full px-3 py-2 rounded-md bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-200"
-              >
-                Sign up with Google
-              </button>
-              <button
-                onClick={()=>handleOAuth('discord')}
-                className="w-full px-3 py-2 rounded-md bg-[#5865F2] hover:bg-[#4752C4] text-white"
-              >
-                Sign up with Discord
-              </button>
-            </div>
+          {user ? (
+            <p>Signed in as {user.email}</p>
+          ) : (
+            <>
+              <form onSubmit={handleEmailSignup} className="space-y-3">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e)=>setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700"
+                  required
+                  autoComplete="email"
+                />
+                <button
+                  type="submit"
+                  className="w-full px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 font-medium"
+                >
+                  Send magic link
+                </button>
+              </form>
 
-            <p className="text-sm text-zinc-400 mt-4">
-              Already have an account? <a href="/login" className="text-emerald-400 hover:text-emerald-300">Log in</a>
-            </p>
-          </>
-        )}
+              <div className="mt-4 space-y-2">
+                <button
+                  onClick={()=>handleOAuth('google')}
+                  className="w-full px-3 py-2 rounded-md bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-200"
+                >
+                  Sign up with Google
+                </button>
+                <button
+                  onClick={()=>handleOAuth('discord')}
+                  className="w-full px-3 py-2 rounded-md bg-[#5865F2] hover:bg-[#4752C4] text-white"
+                >
+                  Sign up with Discord
+                </button>
+              </div>
 
-        <p className="text-sm text-zinc-400 mt-4">{status}</p>
+              <p className="text-sm text-zinc-400 mt-4">
+                Already have an account? <a href="/login" className="text-emerald-400 hover:text-emerald-300">Log in</a>
+              </p>
+
+              <p className="text-xs text-zinc-400 mt-4">
+                By continuing, you agree to our <a className="underline hover:text-zinc-200" href="/terms">Terms</a> and <a className="underline hover:text-zinc-200" href="/privacy">Privacy</a>.
+              </p>
+            </>
+          )}
+
+          <p className="text-sm text-zinc-400 mt-4">{status}</p>
+        </div>
       </div>
     </div>
   )
 }
+
