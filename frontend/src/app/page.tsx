@@ -1,7 +1,7 @@
-
 // File: frontend/src/app/page.tsx (Landing)
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
 
 // ============================
 // Safe client-side env handling
@@ -50,6 +50,7 @@ const DEMO_LOBBIES: Lobby[] = [
 export default function HomePage() {
   const [lobbies, setLobbies] = useState<Lobby[]>(API ? [] : DEMO_LOBBIES)
   const [online, setOnline] = useState<boolean>(Boolean(API))
+  const [authed, setAuthed] = useState<boolean>(false)
 
   // --- Roll20 "Join Game"-style search filter state ---
   const [games, setGames] = useState('') // single-select (matches "Sort By" style)
@@ -59,7 +60,15 @@ export default function HomePage() {
   const [newPlayers, setNewPlayers] = useState(false)
   const [mature, setMature] = useState(false)
   const [freeOnly, setFreeOnly] = useState(false)
-  const [roll20con2025, setRoll20con2025] = useState(false)
+
+  // --- auth status watcher (for search gating) ---
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setAuthed(Boolean(data.user)))
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setAuthed(Boolean(session?.user))
+    })
+    return () => { sub.subscription.unsubscribe() }
+  }, [])
 
   useEffect(() => {
     let live: WebSocket | null = null
@@ -113,7 +122,7 @@ export default function HomePage() {
     ))
   }, [keywords, lobbies])
 
-  function submitSearch(e: React.FormEvent) {
+  async function submitSearch(e: React.FormEvent) {
     e.preventDefault()
     const params = new URLSearchParams()
     if (keywords) params.set('q', keywords)
@@ -123,10 +132,20 @@ export default function HomePage() {
     if (newPlayers) params.set('new_players', 'true')
     if (mature) params.set('mature', 'true')
     if (freeOnly) params.set('free', 'true')
-    if (roll20con2025) params.set('event', 'Roll20Con2025')
-    // Navigate to the scheduled games page with filters in the query string
+
     const url = params.toString() ? `/schedule?${params.toString()}` : '/schedule'
-    if (typeof window !== 'undefined') window.location.href = url
+
+    // Remember the search and gate behind login if needed
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('lastSearchParams', params.toString())
+      sessionStorage.setItem('nextAfterLogin', url)
+    }
+
+    if (authed) {
+      if (typeof window !== 'undefined') window.location.href = url
+    } else {
+      if (typeof window !== 'undefined') window.location.href = `/login?next=${encodeURIComponent(url)}`
+    }
   }
 
   // Options for the single-select dropdowns
@@ -139,7 +158,8 @@ export default function HomePage() {
       <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between relative z-50">
           <a href="/" className="flex items-center gap-2">
-            <Logo />
+            {/* Replaced/augmented icon with your logo image */}
+            <img src="/logo.png" alt="ttrplobby logo" className="h-6 w-6 rounded" />
             <span className="font-bold text-lg tracking-tight">ttrplobby</span>
           </a>
           <nav className="hidden md:flex items-center gap-6 text-sm text-zinc-300">
@@ -158,9 +178,14 @@ export default function HomePage() {
       <section className="relative z-0">
         <div className="max-w-6xl mx-auto px-4 py-16 lg:py-24 grid lg:grid-cols-2 gap-10 items-start">
           <div>
-            <h1 className="text-4xl lg:text-5xl font-extrabold leading-tight">
-              Find a table <span className="text-emerald-400">now</span> or schedule for later.
-            </h1>
+            {/* Added logo next to the main headline */}
+            <div className="flex items-start gap-3">
+              <img src="/logo.png" alt="ttrplobby logo" className="h-10 w-10 lg:h-12 lg:w-12 rounded mt-1" />
+              <h1 className="text-4xl lg:text-5xl font-extrabold leading-tight">
+                Find a table <span className="text-emerald-400">now</span> or schedule for later.
+              </h1>
+            </div>
+
             <p className="mt-4 text-zinc-300 max-w-prose">
               ttrplobby lets you jump into a TTRPG in minutes or plan your next campaign. Create an account with email, Google, or Discord, build your profile, and join a lobby instantly.
             </p>
@@ -207,9 +232,8 @@ export default function HomePage() {
                 />
               </label>
 
-              {/* Event & toggles */}
+              {/* Toggles (removed Roll20Con2025 per request) */}
               <div className="grid sm:grid-cols-2 gap-2">
-                <Toggle label="Roll20Con2025 Event: Roll20Con 2025" checked={roll20con2025} onChange={setRoll20con2025} />
                 <Toggle label="Only find games that welcome new players" checked={newPlayers} onChange={setNewPlayers} />
                 <Toggle label="Show games with Mature Content(18+)" checked={mature} onChange={setMature} />
                 <Toggle label="Only find games that are Free to Play" checked={freeOnly} onChange={setFreeOnly} />
@@ -262,7 +286,7 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold">Ready to roll?</h2>
           <p className="text-zinc-300 mt-2">Create an account and jump into a lobby, or schedule your next session.</p>
           <div className="mt-5 flex justify-center gap-3">
-            <a href="/signup" className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">Get Started</a>
+            <a href="/signup" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Get Started</a>
             <a href="/lobbies" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Browse Lobbies</a>
           </div>
         </div>
@@ -323,7 +347,6 @@ function Logo() {
 // ----------------------------
 // Lightweight runtime tests
 // ----------------------------
-// These run in the browser (dev builds) and help verify helpers without a framework.
 ;(function selfTests(){
   try {
     console.assert(resolveWsUrl('http://api.local') === 'ws://api.local', 'ws from http')
