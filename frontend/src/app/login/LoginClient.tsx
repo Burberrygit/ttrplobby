@@ -1,3 +1,4 @@
+// File: frontend/src/app/login/LoginClient.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -36,7 +37,7 @@ export default function LoginClient() {
     e.preventDefault()
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin }
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
     })
     setStatus(error ? error.message : 'Check your inbox for the sign-in link.')
   }
@@ -44,7 +45,7 @@ export default function LoginClient() {
   async function handleOAuth(provider: 'google' | 'discord') {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: `${window.location.origin}/auth/callback` }
     })
     if (error) setStatus(error.message)
   }
@@ -103,7 +104,7 @@ export default function LoginClient() {
                 </button>
               </div>
 
-              {/* New: small inline sign-up link matching Signup page style */}
+              {/* Small inline sign-up link */}
               <p className="text-sm text-zinc-400 mt-4">
                 Need an account?{' '}
                 <a href="/signup" className="text-emerald-400 hover:text-emerald-300">Sign up</a>
