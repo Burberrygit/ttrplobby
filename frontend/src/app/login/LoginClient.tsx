@@ -103,11 +103,11 @@ export default function LoginClient() {
                 </button>
               </div>
 
-              <div className="mt-4">
-                <a href="/signup" className="w-full inline-block text-center px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 font-medium">
-                  Sign up
-                </a>
-              </div>
+              {/* New: small inline sign-up link matching Signup page style */}
+              <p className="text-sm text-zinc-400 mt-4">
+                Need an account?{' '}
+                <a href="/signup" className="text-emerald-400 hover:text-emerald-300">Sign up</a>
+              </p>
 
               <p className="text-xs text-zinc-400 mt-4">
                 By continuing, you agree to our <a className="underline hover:text-zinc-200" href="/terms">Terms</a> and <a className="underline hover:text-zinc-200" href="/privacy">Privacy</a>.
@@ -121,3 +121,4 @@ export default function LoginClient() {
     </div>
   )
 }
+
