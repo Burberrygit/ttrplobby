@@ -158,7 +158,7 @@ export default function HomePage() {
       <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between relative z-50">
           <a href="/" className="flex items-center gap-2">
-            {/* Replaced/augmented icon with your logo image */}
+            {/* Logo + brand */}
             <img src="/logo.png" alt="ttrplobby logo" className="h-6 w-6 rounded" />
             <span className="font-bold text-lg tracking-tight">ttrplobby</span>
           </a>
@@ -177,23 +177,39 @@ export default function HomePage() {
       {/* Hero */}
       <section className="relative z-0">
         <div className="max-w-6xl mx-auto px-4 py-16 lg:py-24 grid lg:grid-cols-2 gap-10 items-start">
-          <div>
-            {/* Added logo next to the main headline */}
-            <div className="flex items-start gap-3">
-              <img src="/logo.png" alt="ttrplobby logo" className="h-10 w-10 lg:h-12 lg:w-12 rounded mt-1" />
-              <h1 className="text-4xl lg:text-5xl font-extrabold leading-tight">
-                Find a table <span className="text-emerald-400">now</span> or schedule for later.
-              </h1>
-            </div>
+          {/* Left column (logo + text aligned) */}
+          <div className="grid grid-cols-[auto,1fr] items-start gap-3">
+            {/* Logo beside the headline */}
+            <img
+              src="/logo.png"
+              alt="ttrplobby logo"
+              className="h-10 w-10 lg:h-12 lg:w-12 rounded mt-1 col-start-1 row-start-1"
+            />
 
-            <p className="mt-4 text-zinc-300 max-w-prose">
+            {/* Headline */}
+            <h1 className="col-start-2 row-start-1 text-4xl lg:text-5xl font-extrabold leading-tight">
+              Find a table <span className="text-emerald-400">now</span> or schedule for later.
+            </h1>
+
+            {/* Supporting paragraph aligned with headline text */}
+            <p className="col-start-2 row-start-2 mt-4 text-zinc-300 max-w-prose">
               ttrplobby lets you jump into a TTRPG in minutes or plan your next campaign. Create an account with email, Google, or Discord, build your profile, and join a lobby instantly.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a href="/lobbies/new" className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">Create Lobby (start within an hour)</a>
-              <a href="/schedule/new" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Create Scheduled Game</a>
+
+            {/* CTAs */}
+            <div className="col-start-2 row-start-3 mt-6 flex flex-wrap gap-3">
+              <a href="/lobbies/new" className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">
+                Create Lobby (start within an hour)
+              </a>
+              <a href="/schedule/new" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">
+                Create Scheduled Game
+              </a>
             </div>
-            <p className="mt-3 text-xs text-zinc-400">Supports systems across the TTRPG spectrum—aiming for Roll20-level breadth.</p>
+
+            {/* Subtext */}
+            <p className="col-start-2 row-start-4 mt-3 text-xs text-zinc-400">
+              Supports systems across the TTRPG spectrum—aiming for Roll20-level breadth.
+            </p>
           </div>
 
           {/* Search card kept at a lower layer than header */}
@@ -232,7 +248,7 @@ export default function HomePage() {
                 />
               </label>
 
-              {/* Toggles (removed Roll20Con2025 per request) */}
+              {/* Toggles */}
               <div className="grid sm:grid-cols-2 gap-2">
                 <Toggle label="Only find games that welcome new players" checked={newPlayers} onChange={setNewPlayers} />
                 <Toggle label="Show games with Mature Content(18+)" checked={mature} onChange={setMature} />
@@ -355,3 +371,4 @@ function Logo() {
     console.assert(typeof Logo === 'function', 'Logo is a function')
   } catch {/* no-op */}
 })();
+
