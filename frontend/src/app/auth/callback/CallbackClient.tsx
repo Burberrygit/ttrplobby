@@ -20,12 +20,26 @@ export default function CallbackClient() {
           return
         }
 
-        // Send the user where they intended to go
-        const nextFromUrl = searchParams?.get('next')
-        const nextFromStorage = typeof window !== 'undefined'
-          ? sessionStorage.getItem('nextAfterLogin')
-          : null
-        const dest = nextFromUrl || nextFromStorage || '/profile'
+        // Decide destination: onboarding if profile incomplete, else next/profile
+        const { data: userData } = await supabase.auth.getUser()
+        const uid = userData.user?.id
+        let destFromQuery = searchParams?.get('next') || undefined
+        let destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
+
+        let needsOnboarding = false
+        if (uid) {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', uid)
+            .maybeSingle()
+          needsOnboarding = !prof?.username
+        }
+
+        const dest = needsOnboarding
+          ? '/onboarding'
+          : (destFromQuery || destFromStorage || '/profile')
+
         if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
         router.replace(dest)
       } catch (e: any) {
@@ -43,3 +57,4 @@ export default function CallbackClient() {
     </div>
   )
 }
+
