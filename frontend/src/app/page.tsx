@@ -169,7 +169,7 @@ export default function HomePage() {
           </nav>
           <div className="flex items-center gap-2">
             <a href="/signup" className="px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-sm">Sign up</a>
-            <a href="/login" className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-sm">Log in</a>
+            <a href="/login" className="px-3 py-1.5 rounded-md bg-[#29e0e3] hover:bg-[#22c8cb] text-sm">Log in</a>
           </div>
         </div>
       </header>
@@ -188,7 +188,7 @@ export default function HomePage() {
 
             {/* Headline */}
             <h1 className="col-start-2 row-start-1 text-4xl lg:text-5xl font-extrabold leading-tight">
-              Find a table <span className="text-emerald-400">now</span> or schedule for later.
+              Find a table <span className="text-[#29e0e3]">now</span> or schedule for later.
             </h1>
 
             {/* Supporting paragraph aligned with headline text */}
@@ -198,7 +198,7 @@ export default function HomePage() {
 
             {/* CTAs */}
             <div className="col-start-2 row-start-3 mt-6 flex flex-wrap gap-3">
-              <a href="/lobbies/new" className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium">
+              <a href="/lobbies/new" className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium">
                 Create Lobby (start within an hour)
               </a>
               <a href="/schedule/new" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">
@@ -216,7 +216,7 @@ export default function HomePage() {
           <div className="relative z-10 bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-xl">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold">Find Games to Join</h2>
-              <a href="/schedule" className="text-sm text-emerald-300 hover:text-emerald-200">Advanced Search Options »</a>
+              <a href="/schedule" className="text-sm text-[#29e0e3] hover:text-[#22c8cb]">Advanced Search Options »</a>
             </div>
 
             {/* Roll20 "Join Game" search panel */}
@@ -265,7 +265,7 @@ export default function HomePage() {
 
               <div className="flex items-center justify-between text-xs text-zinc-400">
                 <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
+                  <span className={`inline-block h-2 w-2 rounded-full ${online ? 'bg-[#29e0e3]' : 'bg-zinc-600'}`}></span>
                   <span>{online ? 'Live API connected' : 'Demo mode (no API detected)'}</span>
                 </div>
                 <button type="submit" className="px-3 py-1.5 rounded-md bg-zinc-200 text-zinc-900 font-medium">Search</button>
@@ -279,7 +279,7 @@ export default function HomePage() {
                   <LobbyCard key={l.id} lobby={l} />
                 ))}
                 {filtered.length === 0 && (
-                  <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-emerald-400" href="/lobbies/new">create one</a>.</div>
+                  <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-[#29e0e3]" href="/lobbies/new">create one</a>.</div>
                 )}
               </div>
             </div>
@@ -326,7 +326,7 @@ export default function HomePage() {
 function Feature({ title, desc }: { title: string, desc: string }) {
   return (
     <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-      <div className="text-emerald-400 font-semibold">{title}</div>
+      <div className="text-[#29e0e3] font-semibold">{title}</div>
       <p className="text-zinc-300 text-sm mt-1">{desc}</p>
     </div>
   )
@@ -335,7 +335,7 @@ function Feature({ title, desc }: { title: string, desc: string }) {
 function Toggle({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean)=>void }) {
   return (
     <label className="text-sm flex items-center gap-2">
-      <input type="checkbox" checked={checked} onChange={(e)=>onChange(e.target.checked)} className="accent-emerald-600" />
+      <input type="checkbox" checked={checked} onChange={(e)=>onChange(e.target.checked)} className="accent-[#29e0e3]" />
       <span className="text-zinc-300">{label}</span>
     </label>
   )
@@ -343,7 +343,7 @@ function Toggle({ label, checked, onChange }: { label: string, checked: boolean,
 
 function LobbyCard({ lobby }: { lobby: Lobby }) {
   return (
-    <a href={`/lobbies/${lobby.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 hover:border-emerald-600 transition">
+    <a href={`/lobbies/${lobby.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 hover:border-[#29e0e3] transition">
       <div className="text-xs text-zinc-400">{lobby.system} • {lobby.tier} • {lobby.length_min}m</div>
       <div className="mt-1 text-sm font-medium">{lobby.vibe}</div>
       <div className="text-xs text-zinc-400 mt-1">Seats: {lobby.seats} • {lobby.status}</div>
@@ -371,4 +371,3 @@ function Logo() {
     console.assert(typeof Logo === 'function', 'Logo is a function')
   } catch {/* no-op */}
 })();
-
