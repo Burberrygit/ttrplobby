@@ -1,3 +1,4 @@
+# File: .github/workflows/deploy.yml
 name: Build & Deploy to Netlify (Plugin Build, cached)
 
 on:
@@ -8,6 +9,14 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    env:
+      # Provided via GitHub Secrets (Settings → Secrets and variables → Actions)
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID:    ${{ secrets.NETLIFY_SITE_ID }}
+      # If you need public envs at build time, add them here:
+      # NEXT_PUBLIC_API_URL: https://api.ttrplobby.com
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,11 +46,11 @@ jobs:
             next-cache-${{ runner.os }}-${{ github.ref_name }}-
             next-cache-${{ runner.os }}-
 
-      # Restore Netlify Next.js runtime cache
+      # Restore Netlify cache (scoped to frontend/)
       - name: Restore Netlify cache
         uses: actions/cache@v4
         with:
-          path: .netlify/cache
+          path: frontend/.netlify/cache
           key: netlify-cache-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ github.ref_name }}
           restore-keys: |
             netlify-cache-${{ runner.os }}-${{ github.ref_name }}-
@@ -64,48 +73,41 @@ jobs:
           fi
           test -d node_modules && echo "node_modules present"
 
-      - name: Install Netlify CLI
-        run: npm i -g netlify-cli
-
-      - name: Normalize Netlify secrets
-        id: norm
-        env:
-          RAW_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-          RAW_TOKEN:   ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      # ✅ Ensure Netlify CLI + runtime helpers for Next.js plugin exist in CI
+      - name: Ensure Netlify CLI + bootstrap helper
+        working-directory: frontend
         run: |
           set -euxo pipefail
-          SITE_ID_TRIMMED="$(printf '%s' "${RAW_SITE_ID}" | tr -d '\r\n')"
-          TOKEN_TRIMMED="$(printf '%s' "${RAW_TOKEN}"   | tr -d '\r\n')"
-          echo "SITE_ID=${SITE_ID_TRIMMED}" >> $GITHUB_OUTPUT
-          echo "TOKEN=${TOKEN_TRIMMED}"     >> $GITHUB_OUTPUT
-          echo "Site ID length: ${#SITE_ID_TRIMMED}"
-          echo "Token length: ${#TOKEN_TRIMMED}"
+          npm i -D netlify-cli@^17 @netlify/edge-functions-bootstrap@latest @netlify/plugin-nextjs@latest
 
       - name: Netlify Build (with @netlify/plugin-nextjs)
+        working-directory: frontend
         env:
-          NETLIFY_AUTH_TOKEN: ${{ steps.norm.outputs.TOKEN }}
-          NETLIFY_SITE_ID:    ${{ steps.norm.outputs.SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ env.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID:    ${{ env.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          netlify build --auth "${NETLIFY_AUTH_TOKEN}" --context production --debug
+          npx netlify build --auth "$NETLIFY_AUTH_TOKEN" --site "$NETLIFY_SITE_ID" --context production --debug
 
       - name: Show build results
         run: |
           set -euxo pipefail
           echo "frontend/.next:"
           ls -la frontend/.next || true
-          echo ".netlify:"
-          ls -la .netlify || true
-          echo ".netlify/functions:"
-          ls -la .netlify/functions || true
-          echo ".netlify/cache:"
-          ls -la .netlify/cache || true
+          echo "frontend/.netlify:"
+          ls -la frontend/.netlify || true
+          echo "frontend/.netlify/functions:"
+          ls -la frontend/.netlify/functions || true
+          echo "frontend/.netlify/cache:"
+          ls -la frontend/.netlify/cache || true
 
+      # ✅ Deploy using the plugin output; let Netlify handle publish dir
       - name: Deploy to Netlify (prod)
+        working-directory: frontend
         env:
-          NETLIFY_AUTH_TOKEN: ${{ steps.norm.outputs.TOKEN }}
-          NETLIFY_SITE_ID:    ${{ steps.norm.outputs.SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ env.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID:    ${{ env.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          netlify deploy --auth "${NETLIFY_AUTH_TOKEN}" --prod --dir "frontend/.next" --message "CI deploy $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx netlify deploy --prod --build --auth "$NETLIFY_AUTH_TOKEN" --site "$NETLIFY_SITE_ID" --debug
 
