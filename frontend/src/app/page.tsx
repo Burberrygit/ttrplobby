@@ -1,165 +1,148 @@
 // File: frontend/src/app/page.tsx (Landing)
 'use client'
+
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
-// ============================
-// Safe client-side env handling
-// ============================
-function resolveApiBase(): string {
+type Game = {
+  id: string
+  title: string | null
+  system: string | null
+  poster_url: string | null
+  length_min: number | null
+  vibe: string | null
+  seats: number | null
+  status: string | null
+  updated_at: string
+  players_count?: number
+  time_zone?: string | null
+}
+
+const SYSTEMS = [
+  'Any',
+  'D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder',
+  'Shadowrun','Dungeon World','OSR','Savage Worlds','GURPS','Cyberpunk RED','Alien RPG',
+  'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
+] as const
+
+// Curated time zones (match schedule page)
+const COMMON_TZS = [
+  'UTC',
+  'America/Toronto','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+  'America/Sao_Paulo','America/Mexico_City','America/Bogota',
+  'Europe/London','Europe/Dublin','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome',
+  'Africa/Johannesburg',
+  'Asia/Jerusalem','Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Bangkok',
+  'Asia/Singapore','Asia/Hong_Kong','Asia/Tokyo','Asia/Seoul','Asia/Shanghai',
+  'Australia/Sydney','Pacific/Auckland','Pacific/Honolulu',
+] as const
+
+function getBrowserTz(): string {
   try {
-    if (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_API_URL) {
-      return (process as any).env.NEXT_PUBLIC_API_URL as string
-    }
-  } catch {}
-  if (typeof document !== 'undefined') {
-    const meta = document.querySelector('meta[name="ttrplobby-api"]') as HTMLMetaElement | null
-    if (meta?.content) return meta.content
-  }
-  return ''
+    const z = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return z || 'UTC'
+  } catch { return 'UTC' }
 }
-
-function resolveWsUrl(httpBase: string): string {
-  if (!httpBase) return ''
-  return httpBase.startsWith('https') ? httpBase.replace(/^https/, 'wss') : httpBase.replace(/^http/, 'ws')
-}
-
-const API = resolveApiBase()
-const WS = resolveWsUrl(API)
-
-// ----------------------------
-// Types
-// ----------------------------
-export type Lobby = {
-  id: number
-  system: string
-  tier: string
-  length_min: number
-  vibe: string
-  seats: number
-  status: string
-}
-
-// Demo lobbies shown if no API is configured
-const DEMO_LOBBIES: Lobby[] = [
-  { id: 101, system: 'D&D 5e (2014)', tier: '1-4', length_min: 120, vibe: 'Casual one-shot', seats: 5, status: 'open' },
-  { id: 102, system: 'Pathfinder 2e', tier: '1-3', length_min: 90, vibe: 'Beginner friendly', seats: 5, status: 'open' },
-  { id: 103, system: 'Dungeon World', tier: '—', length_min: 60, vibe: 'Rules-light story', seats: 4, status: 'open' },
-]
 
 export default function HomePage() {
-  const [lobbies, setLobbies] = useState<Lobby[]>(API ? [] : DEMO_LOBBIES)
-  const [online, setOnline] = useState<boolean>(Boolean(API))
-  const [authed, setAuthed] = useState<boolean>(false)
-
-  // --- Roll20 "Join Game"-style search filter state ---
-  const [games, setGames] = useState('') // single-select (matches "Sort By" style)
-  const [groups, setGroups] = useState('') // single-select (matches "Sort By" style)
+  // Quick-search filters (aligned with /schedule)
   const [keywords, setKeywords] = useState('')
-  const [sortBy, setSortBy] = useState<'Relevance'>('Relevance')
-  const [newPlayers, setNewPlayers] = useState(false)
+  const [system, setSystem] = useState<string>('Any')
+  const [sortBy, setSortBy] = useState<'Relevance' | 'Soonest' | 'Newest' | 'Popular'>('Relevance')
+  const [onlySeats, setOnlySeats] = useState(false)
+  const [welcomesNew, setWelcomesNew] = useState(false)
   const [mature, setMature] = useState(false)
-  const [freeOnly, setFreeOnly] = useState(false)
+  const [tz, setTz] = useState<string>('Any')
+  const MY_TZ = useMemo(() => getBrowserTz(), [])
 
-  // --- auth status watcher (for future features; harmless to keep) ---
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setAuthed(Boolean(data.user)))
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setAuthed(Boolean(session?.user))
-    })
-    return () => { sub.subscription.unsubscribe() }
-  }, [])
+  // Live Now data (real games)
+  const [games, setGames] = useState<Game[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    let live: WebSocket | null = null
     let mounted = true
+    ;(async () => {
+      try {
+        setErr(null)
+        setLoading(true)
+        // Fetch most recent open games with counts
+        const { data, error } = await supabase
+          .from('games')
+          .select('id,title,system,poster_url,length_min,vibe,seats,status,updated_at,time_zone, game_players(count)')
+          .eq('status', 'open')
+          .order('updated_at', { ascending: false })
+          .limit(12)
+        if (error) throw error
 
-    if (!API) {
-      // Demo mode: no network requests
-      setOnline(false)
-      return () => {}
-    }
+        const mapped: Game[] = (data as any[]).map((g) => ({
+          ...g,
+          players_count:
+            Array.isArray(g.game_players) && g.game_players.length
+              ? Number(g.game_players[0].count)
+              : 0,
+        }))
 
-    // Initial fetch of open lobbies
-    fetch(`${API}/lobbies`)
-      .then(r => r.json())
-      .then((data) => {
-        if (!mounted) return
-        setLobbies(Array.isArray(data) ? data : [])
-        setOnline(true)
-      })
-      .catch(() => {
-        if (!mounted) return
-        setOnline(false)
-      })
-
-    // Live updates for "Now Playing"
-    try {
-      const wsUrl = `${WS}/ws/now-playing`
-      live = wsUrl ? new WebSocket(wsUrl) : null
-      if (live) {
-        live.onopen = () => setOnline(true)
-        live.onclose = () => setOnline(false)
-        live.onerror = () => setOnline(false)
-        live.onmessage = async () => {
-          try {
-            const res = await fetch(`${API}/lobbies`).then(r => r.json())
-            if (mounted && Array.isArray(res)) setLobbies(res)
-          } catch {/* ignore */}
-        }
+        if (mounted) setGames(mapped)
+      } catch (e: any) {
+        if (mounted) setErr(e?.message || 'Failed to load games')
+      } finally {
+        if (mounted) setLoading(false)
       }
-    } catch {/* ignore */}
-
-    return () => { mounted = false; if (live) live.close() }
+    })()
+    return () => { mounted = false }
   }, [])
 
-  // For the "Live Now" preview, we use keywords-only filtering
   const filtered = useMemo(() => {
-    if (!keywords) return lobbies
-    const s = keywords.toLowerCase()
-    return lobbies.filter((l) => (
-      `${l.system} ${l.tier} ${l.vibe}`.toLowerCase().includes(s)
-    ))
-  }, [keywords, lobbies])
+    const s = keywords.trim().toLowerCase()
+    return games.filter((g) => {
+      if (system !== 'Any' && (g.system || '') !== system) return false
+      if (onlySeats) {
+        const remain = (g.seats ?? 0) - (g.players_count ?? 0)
+        if (!(g.status === 'open' && remain > 0)) return false
+      }
+      if (welcomesNew && !(g as any).welcomes_new) return false
+      if (mature && !(g as any).is_mature) return false
+      if (tz !== 'Any' && tz !== 'local') {
+        if ((g.time_zone || '').toLowerCase() !== tz.toLowerCase()) return false
+      }
+      if (!s) return true
+      const hay = `${g.title || ''} ${g.system || ''} ${g.vibe || ''}`.toLowerCase()
+      return hay.includes(s)
+    })
+  }, [games, keywords, system, onlySeats, welcomesNew, mature, tz])
 
   async function submitSearch(e: React.FormEvent) {
     e.preventDefault()
     const params = new URLSearchParams()
     if (keywords) params.set('q', keywords)
-    if (games && games !== 'Any') params.set('games', games)
-    if (groups && groups !== 'Any') params.set('groups', groups)
-    if (sortBy) params.set('sort', sortBy)
-    if (newPlayers) params.set('new_players', 'true')
-    if (mature) params.set('mature', 'true')
-    if (freeOnly) params.set('free', 'true')
+    if (system && system !== 'Any') params.set('system', system)
+    if (onlySeats) params.set('seats', 'open')
+    if (welcomesNew) params.set('new', '1')
+    if (mature) params.set('mature', '1')
+    if (sortBy && sortBy !== 'Relevance') params.set('sort', sortBy)
+    if (tz && tz !== 'Any') params.set('tz', tz === 'local' ? MY_TZ : tz)
+    // Default to status=open on the schedule page
+    if (!params.has('status')) params.set('status', 'open')
 
-    const url = params.toString() ? `/schedule?${params.toString()}` : '/schedule'
-
-    // Remember the search (optional)
+    const url = params.toString() ? `/schedule?${params.toString()}` : '/schedule?status=open'
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('lastSearchParams', params.toString())
+      window.location.href = url
     }
-
-    // 🔓 FREE MODE: no login gate
-    if (typeof window !== 'undefined') window.location.href = url
   }
-
-  // Options for the single-select dropdowns
-  const gameOptions = ['Any','D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder','Shadowrun','Dungeon World','OSR','Savage Worlds','GURPS','Cyberpunk RED','Alien RPG','Delta Green','Blades in the Dark','Powered by the Apocalypse','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other']
-  const groupOptions = ['Any','Beginner Friendly','West Marches','Organized Play','Homebrew','One-Shots','Campaigns']
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* High z-index header to prevent overlap issues */}
+      {/* Header */}
       <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between relative z-50">
           <a href="/" className="flex items-center gap-2">
-            {/* Logo + brand */}
             <img src="/logo.png" alt="ttrplobby logo" className="h-6 w-6 rounded" />
             <span className="font-bold text-lg tracking-tight">ttrplobby</span>
           </a>
           <nav className="hidden md:flex items-center gap-6 text-sm text-zinc-300">
-            <a href="/lobbies" className="hover:text-white">Now Playing</a>
+            <a href="/live/players" className="hover:text-white">Live Players</a>
             <a href="/schedule" className="hover:text-white">Scheduled Games</a>
             <a href="/about" className="hover:text-white">About</a>
           </nav>
@@ -173,67 +156,40 @@ export default function HomePage() {
       {/* Hero */}
       <section className="relative z-0">
         <div className="max-w-6xl mx-auto px-4 py-16 lg:py-24 grid lg:grid-cols-2 gap-10 items-start">
-          {/* Left column (logo + text aligned) */}
+          {/* Left column */}
           <div className="grid grid-cols-[auto,1fr] items-start gap-3">
-            {/* Logo beside the headline */}
             <img
               src="/logo.png"
               alt="ttrplobby logo"
               className="h-10 w-10 lg:h-12 lg:w-12 rounded mt-1 col-start-1 row-start-1"
             />
-
-            {/* Headline */}
             <h1 className="col-start-2 row-start-1 text-4xl lg:text-5xl font-extrabold leading-tight">
               Find a table <span className="text-brand">now</span> or schedule for later.
             </h1>
-
-            {/* Supporting paragraph aligned with headline text */}
             <p className="col-start-2 row-start-2 mt-4 text-zinc-300 max-w-prose">
               ttrplobby lets you jump into a TTRPG in minutes or plan your next campaign. Create an account with email, Google, or Discord, build your profile, and join a lobby instantly.
             </p>
 
             {/* CTAs */}
             <div className="col-start-2 row-start-3 mt-6 flex flex-wrap gap-3">
-              <a href="/lobbies/new" className="px-4 py-2 rounded-lg bg-brand hover:bg-brandHover font-medium">
-                Create Lobby (start within an hour)
+              <a href="/live/new" className="px-4 py-2 rounded-lg bg-brand hover:bg-brandHover font-medium">
+                Start Live Game
               </a>
               <a href="/schedule/new" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">
                 Create Scheduled Game
               </a>
             </div>
-
-            {/* Subtext */}
-            <p className="col-start-2 row-start-4 mt-3 text-xs text-zinc-400">
-              Supports systems across the TTRPG spectrum—aiming for Roll20-level breadth.
-            </p>
           </div>
 
-          {/* Search card kept at a lower layer than header */}
+          {/* Search card */}
           <div className="relative z-10 bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-xl">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold">Find Games to Join</h2>
-              <a href="/schedule" className="text-sm text-brand hover:text-brandHover">Advanced Search Options »</a>
+              <a href="/schedule?status=open" className="text-sm text-brand hover:text-brandHover">Advanced Search Options »</a>
             </div>
 
-            {/* Roll20 "Join Game" search panel */}
             <form onSubmit={submitSearch} className="grid gap-3">
-              {/* Playing Any of These Games (single-select like Sort By) */}
-              <label className="text-sm">
-                <div className="mb-1 text-zinc-400">Playing Any of These Games</div>
-                <select value={games} onChange={(e)=>setGames(e.target.value)} className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700">
-                  {gameOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </label>
-
-              {/* Sort By */}
-              <label className="text-sm">
-                <div className="mb-1 text-zinc-400">Sort By:</div>
-                <select value={sortBy} onChange={(e)=>setSortBy(e.target.value as 'Relevance')} className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700">
-                  <option>Relevance</option>
-                </select>
-              </label>
-
-              {/* Matching Keywords */}
+              {/* Keywords */}
               <label className="text-sm">
                 <div className="mb-1 text-zinc-400">Matching Keywords:</div>
                 <input
@@ -244,39 +200,58 @@ export default function HomePage() {
                 />
               </label>
 
-              {/* Toggles */}
-              <div className="grid sm:grid-cols-2 gap-2">
-                <Toggle label="Only find games that welcome new players" checked={newPlayers} onChange={setNewPlayers} />
-                <Toggle label="Show games with Mature Content(18+)" checked={mature} onChange={setMature} />
-                <Toggle label="Only find games that are Free to Play" checked={freeOnly} onChange={setFreeOnly} />
+              {/* System + Sort + Time Zone */}
+              <div className="grid sm:grid-cols-3 gap-2">
+                <label className="text-sm">
+                  <div className="mb-1 text-zinc-400">System</div>
+                  <select value={system} onChange={(e)=>setSystem(e.target.value)} className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700">
+                    {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <div className="mb-1 text-zinc-400">Sort</div>
+                  <select value={sortBy} onChange={(e)=>setSortBy(e.target.value as any)} className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700">
+                    <option>Relevance</option>
+                    <option>Soonest</option>
+                    <option>Newest</option>
+                    <option>Popular</option>
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <div className="mb-1 text-zinc-400">Time Zone</div>
+                  <select value={tz} onChange={(e)=>setTz(e.target.value)} className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700">
+                    <option value="Any">Any</option>
+                    <option value="local">Local (auto: {MY_TZ})</option>
+                    {COMMON_TZS.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
+                </label>
               </div>
 
-              {/* Gaming Groups (single-select like Sort By) */}
-              <label className="text-sm">
-                <div className="mb-1 text-zinc-400">Gaming Groups</div>
-                <select value={groups} onChange={(e)=>setGroups(e.target.value)} className="w-full px-3 py-2 rounded-md bg-zinc-900 border border-zinc-700">
-                  {groupOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </label>
+              {/* Toggles (no Free-to-Play) */}
+              <div className="grid sm:grid-cols-3 gap-2">
+                <Toggle label="Only show games with open seats" checked={onlySeats} onChange={setOnlySeats} />
+                <Toggle label="Welcomes new players" checked={welcomesNew} onChange={setWelcomesNew} />
+                <Toggle label="18+ content" checked={mature} onChange={setMature} />
+              </div>
 
-              <div className="flex items-center justify-between text-xs text-zinc-400">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${online ? 'bg-brand' : 'bg-zinc-600'}`}></span>
-                  <span>{online ? 'Live API connected' : 'Demo mode (no API detected)'}</span>
-                </div>
+              <div className="flex items-center justify-end">
                 <button type="submit" className="px-3 py-1.5 rounded-md bg-zinc-200 text-zinc-900 font-medium">Search</button>
               </div>
             </form>
 
             <div className="mt-6">
               <h3 className="text-sm uppercase tracking-wide text-zinc-400 mt-1">Live Now</h3>
+              {err && <div className="text-sm text-red-400 mt-2">{err}</div>}
               <div className="mt-3 grid sm:grid-cols-2 gap-3">
-                {filtered.slice(0, 6).map((l) => (
-                  <LobbyCard key={l.id} lobby={l} />
+                {(loading ? [] : filtered).slice(0, 6).map((g) => (
+                  <LiveCard key={g.id} g={g} />
                 ))}
-                {filtered.length === 0 && (
-                  <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-brand hover:text-brandHover" href="/lobbies/new">create one</a>.</div>
+                {!loading && filtered.length === 0 && (
+                  <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-brand hover:text-brandHover" href="/live/new">start one</a>.</div>
                 )}
+                {loading && [...Array(4)].map((_,i)=>(
+                  <div key={i} className="h-28 rounded-lg border border-zinc-800 bg-zinc-900/60 animate-pulse" />
+                ))}
               </div>
             </div>
           </div>
@@ -286,8 +261,8 @@ export default function HomePage() {
       {/* Feature grid */}
       <section className="border-t border-zinc-900">
         <div className="max-w-6xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-6">
-          <Feature title="Instant Lobbies" desc="Join a table in minutes with real-time seating and chat."/>
-          <Feature title="Scheduled Games" desc="Post time slots, auto-accept compatible players, send calendar invites."/>
+          <Feature title="Instant Lobbies" desc="Start a live room and fill seats fast."/>
+          <Feature title="Scheduled Games" desc="Post time slots, auto-accept compatible players."/>
           <Feature title="Profiles & Progress" desc="Avatar, username, games played — your reputation travels with you."/>
         </div>
       </section>
@@ -299,12 +274,12 @@ export default function HomePage() {
           <p className="text-zinc-300 mt-2">Create an account and jump into a lobby, or schedule your next session.</p>
           <div className="mt-5 flex justify-center gap-3">
             <a href="/signup" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Get Started</a>
-            <a href="/lobbies" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Browse Lobbies</a>
+            <a href="/schedule?status=open" className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Browse Lobbies</a>
           </div>
         </div>
       </section>
 
-      {/* Footer kept above background content */}
+      {/* Footer */}
       <footer className="border-t border-zinc-900 relative z-10">
         <div className="max-w-6xl mx-auto px-4 py-8 text-sm text-zinc-400 flex flex-wrap items-center justify-between gap-3">
           <div>© {new Date().getFullYear()} ttrplobby</div>
@@ -337,12 +312,28 @@ function Toggle({ label, checked, onChange }: { label: string, checked: boolean,
   )
 }
 
-function LobbyCard({ lobby }: { lobby: Lobby }) {
+function LiveCard({ g }: { g: Game }) {
+  const remain = Math.max(0, (g.seats ?? 0) - (g.players_count ?? 0))
+  const full = remain <= 0 || g.status !== 'open'
+  const lengthText = g.length_min
+    ? (g.length_min >= 60 ? `${(g.length_min / 60).toFixed(g.length_min % 60 ? 1 : 0)} h` : `${g.length_min} min`)
+    : '—'
   return (
-    <a href={`/lobbies/${lobby.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 hover:border-brand transition">
-      <div className="text-xs text-zinc-400">{lobby.system} • {lobby.tier} • {lobby.length_min}m</div>
-      <div className="mt-1 text-sm font-medium">{lobby.vibe}</div>
-      <div className="text-xs text-zinc-400 mt-1">Seats: {lobby.seats} • {lobby.status}</div>
+    <a href={`/lobbies/${g.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 hover:border-brand transition">
+      <div className="flex gap-3">
+        <img
+          src={g.poster_url || '/game-poster-fallback.jpg'}
+          alt={g.title || 'Game poster'}
+          className="h-20 w-28 rounded-md object-cover border border-zinc-800"
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold truncate">{g.title || 'Untitled game'}</div>
+          <div className="text-xs text-zinc-400 mt-0.5">
+            {g.system || 'TTRPG'} • Length {lengthText} • {full ? 'Full' : `${remain} seats`}
+          </div>
+          {g.vibe && <div className="text-xs text-zinc-400 mt-0.5 truncate">{g.vibe}</div>}
+        </div>
+      </div>
     </a>
   )
 }
@@ -361,9 +352,7 @@ function Logo() {
 // ----------------------------
 ;(function selfTests(){
   try {
-    console.assert(resolveWsUrl('http://api.local') === 'ws://api.local', 'ws from http')
-    console.assert(resolveWsUrl('https://api.local') === 'wss://api.local', 'wss from https')
-    console.assert(typeof resolveApiBase() === 'string', 'resolveApiBase returns string')
+    console.assert(typeof getBrowserTz() === 'string', 'getBrowserTz returns string')
     console.assert(typeof Logo === 'function', 'Logo is a function')
   } catch {/* no-op */}
 })();
