@@ -1,54 +1,70 @@
 // File: frontend/src/app/schedule/page.tsx
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-type Game = {
-  id: string
-  host_id: string
-  title: string
-  system: string | null
-  poster_url: string | null
-  scheduled_at: string | null
-  status: 'draft' | 'open' | 'full' | 'completed' | 'cancelled' | string
-  seats: number
-  length_min: number | null
-  vibe: string | null
-  welcomes_new: boolean
-  is_mature: boolean
-  created_at: string
-  updated_at: string
-  players_count?: number
-  time_zone?: string | null
+// Route-level hints: avoid static prerender for this page
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+/* ----------------------------- Wrapper Page ----------------------------- */
+/* This component does NOT call useSearchParams. It just provides Suspense. */
+export default function SchedulePage() {
+  return (
+    <Suspense fallback={<Shell><TopBanner /><div className="h-40 rounded-2xl border border-white/10 bg-white/5 animate-pulse" /></Shell>}>
+      <SearchGamesClient />
+    </Suspense>
+  )
 }
 
-const SYSTEMS = [
-  'Any',
-  'D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder',
-  'Shadowrun','Dungeon World','OSR','Savage Worlds','GURPS','Cyberpunk RED','Alien RPG',
-  'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
-] as const
-
-const STATUSES = ['Any','open','completed','draft','cancelled'] as const
-const SORTS = ['Relevance','Soonest','Newest','Popular'] as const
-
-// Curated IANA time zones for the dropdown (you can expand this list anytime)
-const COMMON_TZS = [
-  'UTC',
-  'America/Toronto','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
-  'America/Sao_Paulo','America/Mexico_City','America/Bogota',
-  'Europe/London','Europe/Dublin','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome',
-  'Africa/Johannesburg',
-  'Asia/Jerusalem','Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Bangkok',
-  'Asia/Singapore','Asia/Hong_Kong','Asia/Tokyo','Asia/Seoul','Asia/Shanghai',
-  'Australia/Sydney','Pacific/Auckland','Pacific/Honolulu',
-] as const
-
-export default function SearchGamesPage() {
+/* ------------------------- Client Search Component ------------------------- */
+/* All previous logic (including useSearchParams) lives here. */
+function SearchGamesClient() {
   const router = useRouter()
   const params = useSearchParams()
+
+  type Game = {
+    id: string
+    host_id: string
+    title: string
+    system: string | null
+    poster_url: string | null
+    scheduled_at: string | null
+    status: 'draft' | 'open' | 'full' | 'completed' | 'cancelled' | string
+    seats: number
+    length_min: number | null
+    vibe: string | null
+    welcomes_new: boolean
+    is_mature: boolean
+    created_at: string
+    updated_at: string
+    players_count?: number
+    time_zone?: string | null
+  }
+
+  const SYSTEMS = [
+    'Any',
+    'D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder',
+    'Shadowrun','Dungeon World','OSR','Savage Worlds','GURPS','Cyberpunk RED','Alien RPG',
+    'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
+  ] as const
+
+  const STATUSES = ['Any','open','completed','draft','cancelled'] as const
+  const SORTS = ['Relevance','Soonest','Newest','Popular'] as const
+
+  // Curated IANA time zones (expand anytime)
+  const COMMON_TZS = [
+    'UTC',
+    'America/Toronto','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+    'America/Sao_Paulo','America/Mexico_City','America/Bogota',
+    'Europe/London','Europe/Dublin','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome',
+    'Africa/Johannesburg',
+    'Asia/Jerusalem','Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Bangkok',
+    'Asia/Singapore','Asia/Hong_Kong','Asia/Tokyo','Asia/Seoul','Asia/Shanghai',
+    'Australia/Sydney','Pacific/Auckland','Pacific/Honolulu',
+  ] as const
 
   const MY_TZ = useMemo(() => getBrowserTz(), [])
   const TZ_OPTIONS = useMemo(() => ['Any', 'local', ...COMMON_TZS] as string[], [])
@@ -125,7 +141,7 @@ export default function SearchGamesPage() {
   async function load() {
     try {
       setErrorMsg(null)
-      // Use '*' so we gracefully include optional columns like time_zone if present
+      // Use '*' so we include optional columns like time_zone if present
       let query = supabase
         .from('games')
         .select('*, game_players(count)')
@@ -247,8 +263,8 @@ export default function SearchGamesPage() {
               value={tz}
               onChange={setTz}
               label="Time zone"
-              options={TZ_OPTIONS}
-              labels={tzLabels}
+              options={['Any', 'local', ...COMMON_TZS] as unknown as string[]}
+              labels={{ local: `Local (auto: ${MY_TZ})` }}
             />
             <FiltersPopover>
               <div className="grid gap-3 p-3 text-sm">
@@ -357,7 +373,7 @@ function FiltersPopover({ children }: { children: React.ReactNode }) {
   )
 }
 
-function GameCard({ g, tz }: { g: Game, tz: string }) {
+function GameCard({ g, tz }: { g: any, tz: string }) {
   const remain = Math.max(0, (g.seats ?? 0) - (g.players_count ?? 0))
   const full = remain <= 0 || g.status !== 'open'
   const lengthText = g.length_min
@@ -430,7 +446,6 @@ function getBrowserTz(): string {
 function fmtDateInTz(iso: string, tz: string): string {
   try {
     const d = new Date(iso)
-    // Example: "Oct 3, 7:30 PM"
     return new Intl.DateTimeFormat(undefined, {
       timeZone: tz,
       month: 'short',
@@ -439,7 +454,6 @@ function fmtDateInTz(iso: string, tz: string): string {
       minute: '2-digit'
     }).format(d)
   } catch {
-    // Fallback to local
     const d = new Date(iso)
     return d.toLocaleString()
   }
