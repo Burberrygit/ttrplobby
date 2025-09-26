@@ -30,6 +30,16 @@ type ChatMsg = {
   ts: number
 }
 
+/* Normalize user-provided external links (e.g. "fvtt.life" -> "https://fvtt.life") */
+function normalizeExternalUrl(u?: string | null): string | null {
+  if (!u) return null
+  const s = u.trim()
+  if (!s) return null
+  if (/^[a-z]+:\/\//i.test(s)) return s        // http://, https://, etc
+  if (s.startsWith('//')) return 'https:' + s   // protocol-relative
+  return 'https://' + s.replace(/^\/*/, '')     // default to https
+}
+
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
@@ -176,6 +186,10 @@ export default function LiveRoomPage() {
     return Math.max(0, cap - used)
   }, [room?.seats, peers.length])
 
+  // Normalized external links for rendering
+  const discordHref = normalizeExternalUrl(room?.discord_url)
+  const gameHref = normalizeExternalUrl(room?.game_url)
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
       <header className="sticky top-0 z-30 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
@@ -211,15 +225,15 @@ export default function LiveRoomPage() {
             className="w-full h-56 object-cover"
           />
           <div className="p-3 text-sm text-white/70 border-t border-white/10 flex items-center gap-3 flex-wrap">
-            {room?.discord_url ? (
-              <a href={room.discord_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+            {discordHref ? (
+              <a href={discordHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
                 <span>Discord</span>
               </a>
             ) : (
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
             )}
-            {room?.game_url ? (
-              <a href={room.game_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+            {gameHref ? (
+              <a href={gameHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
                 <span>Game link</span>
               </a>
             ) : (
@@ -238,7 +252,6 @@ export default function LiveRoomPage() {
           <div className="text-white/60 text-sm mt-2">
             Seats: {room?.seats ?? '—'} • In lobby: {peers.length} • Open seats: {remainSeats}
           </div>
-          {/* Removed "Host controls enabled" badge per request */}
           {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
         </div>
       </section>
