@@ -15,7 +15,7 @@ export default function NewLobbyPage() {
   const [title, setTitle] = useState('')
   const [system, setSystem] = useState('D&D 5e (2014)')
   const [seats, setSeats] = useState(5)
-  const [lengthMin, setLengthMin] = useState<number>(120)
+  const [lengthHours, setLengthHours] = useState<number>(2) // was minutes; now hours (default 2h)
   const [vibe, setVibe] = useState('Casual one-shot')
   const [welcomesNew, setWelcomesNew] = useState(true)
   const [isMature, setIsMature] = useState(false)
@@ -48,7 +48,6 @@ export default function NewLobbyPage() {
       setPosterPreview('')
       return
     }
-    // Basic validation
     const MAX_MB = 5
     if (!file.type.startsWith('image/')) {
       setErrorMsg('Please select an image file.')
@@ -73,7 +72,7 @@ export default function NewLobbyPage() {
     const path = `${userId}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase
       .storage
-      .from('posters')               // <- make sure you created a public bucket named "posters"
+      .from('posters')               // ensure a public bucket named "posters" exists
       .upload(path, posterFile, {
         cacheControl: '3600',
         upsert: true,
@@ -89,12 +88,13 @@ export default function NewLobbyPage() {
     setSaving(true); setErrorMsg(null)
     try {
       const poster_url = await uploadPosterIfNeeded()
+      const minutes = Math.round((Number.isFinite(lengthHours) ? lengthHours : 2) * 60) // convert hours → minutes
       const id = await createGame({
         title: title || 'Untitled game',
         system,
         poster_url: poster_url ?? null,
         seats,
-        length_min: lengthMin,
+        length_min: minutes,
         vibe,
         welcomes_new: welcomesNew,
         is_mature: isMature,
@@ -120,19 +120,8 @@ export default function NewLobbyPage() {
         <p className="text-white/60 mt-1">Fill in the basics—players can join instantly.</p>
 
         <form onSubmit={onSubmit} className="grid md:grid-cols-2 gap-4 mt-6">
-          <Field label="Title">
-            <input className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
-                   value={title} onChange={e=>setTitle(e.target.value)} placeholder="Beginner-friendly one-shot" required />
-          </Field>
 
-          <Field label="System">
-            <select className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
-                    value={system} onChange={e=>setSystem(e.target.value)}>
-              {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </Field>
-
-          {/* Poster upload */}
+          {/* Poster upload (moved to the top) */}
           <div className="md:col-span-2">
             <label className="grid gap-2 text-sm">
               <span className="text-white/70">Poster image</span>
@@ -171,16 +160,35 @@ export default function NewLobbyPage() {
             </label>
           </div>
 
-          <Field label="Seats">
-            <input type="number" min={1} max={10}
-                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
-                   value={seats} onChange={e=>setSeats(parseInt(e.target.value || '1', 10))} />
+          <Field label="Title">
+            <input className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
+                   value={title} onChange={e=>setTitle(e.target.value)} placeholder="Beginner-friendly one-shot" required />
           </Field>
 
-          <Field label="Length (minutes)">
-            <input type="number" min={30} max={480} step={15}
-                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
-                   value={lengthMin} onChange={e=>setLengthMin(parseInt(e.target.value || '60', 10))} />
+          <Field label="System">
+            <select className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
+                    value={system} onChange={e=>setSystem(e.target.value)}>
+              {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </Field>
+
+          <Field label="Seats">
+            <input
+              type="number" min={1} max={10}
+              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
+              value={seats}
+              onChange={e=>setSeats(parseInt(e.target.value || '1', 10))}
+            />
+          </Field>
+
+          {/* Length in HOURS now */}
+          <Field label="Length (Hours)">
+            <input
+              type="number" min={0.5} max={8} step={0.5}
+              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
+              value={lengthHours}
+              onChange={e=>setLengthHours(parseFloat(e.target.value || '2'))}
+            />
           </Field>
 
           <Field label="Vibe (short description)">
@@ -205,8 +213,10 @@ export default function NewLobbyPage() {
           {errorMsg && <div className="md:col-span-2 text-sm text-red-400">{errorMsg}</div>}
 
           <div className="md:col-span-2 flex items-center gap-2">
-            <button disabled={saving}
-                    className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60">
+            <button
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
+            >
               {saving ? 'Creating…' : 'Create lobby'}
             </button>
             <a href="/lobbies" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
@@ -250,4 +260,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
