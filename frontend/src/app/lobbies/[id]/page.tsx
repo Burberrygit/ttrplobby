@@ -1,10 +1,21 @@
 // File: frontend/src/app/lobbies/[id]/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { fetchGame, joinGame, leaveGame, deleteGame, endGame, Game } from '@/lib/games'
+
+type Player = {
+  user_id: string
+  role: 'host' | 'player' | string
+  user?: {
+    id: string
+    username: string | null
+    display_name: string | null
+    avatar_url: string | null
+  } | null
+}
 
 export default function LobbyDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -15,8 +26,22 @@ export default function LobbyDetailPage() {
 
   const [loading, setLoading] = useState(true)
   const [game, setGame] = useState<Game | null>(null)
+  const [players, setPlayers] = useState<Player[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
+
+  // Owner menu (top-right of header)
+  const [ownerMenuOpen, setOwnerMenuOpen] = useState(false)
+  const ownerMenuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!ownerMenuRef.current) return
+      if (!ownerMenuRef.current.contains(e.target as Node)) setOwnerMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   useEffect(() => {
     (async () => {
@@ -29,8 +54,7 @@ export default function LobbyDetailPage() {
       setAuthChecked(true)
       try {
         setLoading(true)
-        const g = await fetchGame(id)
-        setGame(g)
+        await loadAll()
       } catch (e: any) {
         setErrorMsg(e?.message || 'Failed to load game')
       } finally {
@@ -40,8 +64,24 @@ export default function LobbyDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  const players = game?.players_count ?? 0
-  const remain = Math.max(0, (game?.seats ?? 0) - players)
+  async function loadAll() {
+    const g = await fetchGame(id)
+    setGame(g)
+    await loadPlayers()
+  }
+
+  async function loadPlayers() {
+    const { data, error } = await supabase
+      .from('game_players')
+      .select('user_id, role, user:profiles(id, username, display_name, avatar_url)')
+      .eq('game_id', id)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    setPlayers((data as Player[]) || [])
+  }
+
+  const playersCount = game?.players_count ?? players.length
+  const remain = Math.max(0, (game?.seats ?? 0) - playersCount)
   const full = remain <= 0 || game?.status !== 'open'
   const isOwner = useMemo(() => Boolean(game && me && game.host_id === me), [game, me])
 
@@ -50,25 +90,27 @@ export default function LobbyDetailPage() {
     try {
       setWorking(true)
       await joinGame(game.id)
-      setGame({ ...game, players_count: (game.players_count ?? 0) + 1 })
+      await loadAll()
     } catch (e: any) {
       alert(e?.message || 'Join failed')
     } finally {
       setWorking(false)
     }
   }
+
   async function doLeave() {
     if (!game) return
     try {
       setWorking(true)
       await leaveGame(game.id)
-      setGame({ ...game, players_count: Math.max(0, (game.players_count ?? 0) - 1) })
+      await loadAll()
     } catch (e: any) {
       alert(e?.message || 'Leave failed')
     } finally {
       setWorking(false)
     }
   }
+
   async function doDelete() {
     if (!game) return
     const ok = confirm('Delete this game? This cannot be undone.')
@@ -83,6 +125,7 @@ export default function LobbyDetailPage() {
       setWorking(false)
     }
   }
+
   async function doEnd() {
     if (!game) return
     const ok = confirm('Mark this game as completed?')
@@ -133,6 +176,40 @@ export default function LobbyDetailPage() {
             className="h-56 w-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+
+          {/* Owner dropdown (top-right over image) */}
+          {isOwner && (
+            <div className="absolute top-3 right-3" ref={ownerMenuRef}>
+              <button
+                onClick={() => setOwnerMenuOpen(v => !v)}
+                className="rounded-lg bg-black/55 hover:bg-black/70 text-white px-3 py-1.5 text-sm border border-white/20"
+                aria-haspopup="menu"
+                aria-expanded={ownerMenuOpen}
+              >
+                Actions ▾
+              </button>
+              {ownerMenuOpen && (
+                <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
+                  <button
+                    disabled={working}
+                    onClick={() => { setOwnerMenuOpen(false); void doEnd() }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+                  >
+                    {game.status === 'completed' ? 'Reopen (coming soon)' : 'End game'}
+                  </button>
+                  <button
+                    disabled={working}
+                    onClick={() => { setOwnerMenuOpen(false); void doDelete() }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300"
+                  >
+                    Delete game
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Title & stats (bottom overlay) */}
           <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-white">{game.title}</h1>
@@ -146,6 +223,7 @@ export default function LobbyDetailPage() {
 
         {/* Body */}
         <div className="p-6 md:p-8 bg-gradient-to-br from-zinc-900 to-zinc-800 text-white">
+          {/* Info grid */}
           <div className="grid sm:grid-cols-2 gap-4">
             <Info label="Status" value={titleCase(game.status)} />
             <Info label="Length" value={game.length_min ? `${game.length_min} min` : '—'} />
@@ -153,7 +231,8 @@ export default function LobbyDetailPage() {
             <Info label="18+" value={game.is_mature ? 'Yes' : 'No'} />
           </div>
 
-          <div className="flex items-center gap-2 mt-6">
+          {/* Actions row */}
+          <div className="flex flex-wrap items-center gap-2 mt-6">
             {!isOwner && (
               <>
                 <button
@@ -172,31 +251,90 @@ export default function LobbyDetailPage() {
                 </button>
               </>
             )}
-            {isOwner && (
-              <>
-                <button
-                  disabled={working}
-                  onClick={doEnd}
-                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20"
-                >
-                  {game.status === 'completed' ? 'Reopen (coming soon)' : 'End game'}
-                </button>
-                <button
-                  disabled={working}
-                  onClick={doDelete}
-                  className="px-4 py-2 rounded-xl border border-red-400/50 text-red-300 hover:border-red-400"
-                >
-                  Delete
-                </button>
-              </>
-            )}
+            <a href="/profile" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Back to profile</a>
             <a href="/lobbies" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Back to lobbies</a>
           </div>
+
+          {/* Players section */}
+          <div className="mt-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Players</h2>
+              <div className="text-sm text-white/60">{players.length} joined</div>
+            </div>
+
+            {players.length === 0 ? (
+              <div className="text-white/70 text-sm mt-3">No one has joined yet.</div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                {players.map((p) => (
+                  <PlayerCard key={p.user_id} p={p} isHost={p.user_id === game.host_id} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {errorMsg && <div className="text-sm text-red-400 mt-6">{errorMsg}</div>}
         </div>
       </div>
     </Shell>
   )
 }
+
+function PlayerCard({ p, isHost }: { p: Player; isHost: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!ref.current) return
+      if (!ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  const name = p.user?.display_name || p.user?.username || 'Player'
+  const avatar =
+    p.user?.avatar_url ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0B0B0E&color=FFFFFF`
+
+  return (
+    <div className="relative rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+      <div className="flex items-center gap-3">
+        <img src={avatar} alt={name} className="h-12 w-12 rounded-xl object-cover ring-2 ring-white/10" />
+        <div className="min-w-0">
+          <div className="font-semibold truncate">{name}</div>
+          <div className="text-sm text-white/70">
+            {isHost ? 'DM' : (p.role === 'host' ? 'DM' : 'Player')}
+          </div>
+        </div>
+      </div>
+
+      {/* Per-user quick menu */}
+      <div className="absolute top-3 right-3" ref={ref}>
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="rounded-md bg-black/50 hover:bg-black/70 text-white px-2 py-1 text-xs border border-white/20"
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          ⋯
+        </button>
+        {open && (
+          <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white">
+            <button
+              className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+              onClick={() => alert('Messaging coming soon')}
+            >
+              Send message
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------------- UI helpers ----------------------------- */
 
 function titleCase(s: string) {
   return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -229,3 +367,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
