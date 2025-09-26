@@ -15,7 +15,7 @@ type Game = {
   status: string | null
   updated_at: string
   players_count?: number
-  time_zone?: string | null
+  time_zone?: string | null // optional; filter skips if DB doesn't have it
 }
 
 const SYSTEMS = [
@@ -69,7 +69,8 @@ export default function HomePage() {
         // Fetch most recent open games with counts
         const { data, error } = await supabase
           .from('games')
-          .select('id,title,system,poster_url,length_min,vibe,seats,status,updated_at,time_zone, game_players(count)')
+          // IMPORTANT: don't select time_zone if your DB doesn't have it
+          .select('id,title,system,poster_url,length_min,vibe,seats,status,updated_at, game_players(count)')
           .eq('status', 'open')
           .order('updated_at', { ascending: false })
           .limit(12)
@@ -95,7 +96,7 @@ export default function HomePage() {
 
   const filtered = useMemo(() => {
     const s = keywords.trim().toLowerCase()
-    return games.filter((g) => {
+    return games.filter((g: Game | (Game & Record<string, any>)) => {
       if (system !== 'Any' && (g.system || '') !== system) return false
       if (onlySeats) {
         const remain = (g.seats ?? 0) - (g.players_count ?? 0)
@@ -103,8 +104,12 @@ export default function HomePage() {
       }
       if (welcomesNew && !(g as any).welcomes_new) return false
       if (mature && !(g as any).is_mature) return false
+      // Time zone filter only applies if the record actually has a time_zone field
       if (tz !== 'Any' && tz !== 'local') {
-        if ((g.time_zone || '').toLowerCase() !== tz.toLowerCase()) return false
+        if ('time_zone' in g && typeof (g as any).time_zone === 'string') {
+          if (((g as any).time_zone || '').toLowerCase() !== tz.toLowerCase()) return false
+        }
+        // If no time_zone on the row, do not exclude it
       }
       if (!s) return true
       const hay = `${g.title || ''} ${g.system || ''} ${g.vibe || ''}`.toLowerCase()
@@ -356,3 +361,4 @@ function Logo() {
     console.assert(typeof Logo === 'function', 'Logo is a function')
   } catch {/* no-op */}
 })();
+
