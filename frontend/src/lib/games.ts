@@ -19,7 +19,6 @@ export type Game = {
   players_count?: number
 }
 
-/** Ensure user is signed in; return user.id (throws if not) */
 export async function requireUserId(): Promise<string> {
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error) throw error
@@ -27,7 +26,6 @@ export async function requireUserId(): Promise<string> {
   return user.id
 }
 
-/** Create a new game for the current user (host). Returns the game id. */
 export async function createGame(input: Partial<Game>): Promise<string> {
   const userId = await requireUserId()
   const payload = {
@@ -50,7 +48,6 @@ export async function createGame(input: Partial<Game>): Promise<string> {
     .single()
   if (error) throw error
 
-  // add host membership
   const { error: memErr } = await supabase
     .from('game_players')
     .insert({ game_id: data.id, user_id: userId, role: 'host' })
@@ -59,9 +56,28 @@ export async function createGame(input: Partial<Game>): Promise<string> {
   return data.id as string
 }
 
-/** Return open games (optionally filter client-side after). Includes players_count aggregate. */
+export async function updateGame(gameId: string, patch: Partial<Game>): Promise<void> {
+  await requireUserId()
+  const { error } = await supabase
+    .from('games')
+    .update({
+      title: patch.title,
+      system: patch.system ?? null,
+      poster_url: patch.poster_url ?? null,
+      scheduled_at: patch.scheduled_at ?? null,
+      status: patch.status as Game['status'] | undefined,
+      seats: patch.seats as number | undefined,
+      length_min: patch.length_min as number | null | undefined,
+      vibe: patch.vibe ?? null,
+      welcomes_new: patch.welcomes_new as boolean | undefined,
+      is_mature: patch.is_mature as boolean | undefined,
+    })
+    .eq('id', gameId)
+  if (error) throw error
+}
+
 export async function fetchOpenGames(): Promise<Game[]> {
-  await requireUserId() // enforce auth for RLS
+  await requireUserId()
   const { data, error } = await supabase
     .from('games')
     .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count)')
@@ -69,7 +85,6 @@ export async function fetchOpenGames(): Promise<Game[]> {
     .order('scheduled_at', { ascending: true })
     .limit(100)
   if (error) throw error
-
   return (data as any[]).map((g) => ({
     ...g,
     players_count: Array.isArray(g.game_players) && g.game_players.length
@@ -78,7 +93,6 @@ export async function fetchOpenGames(): Promise<Game[]> {
   }))
 }
 
-/** Fetch one game by id, with players_count. */
 export async function fetchGame(id: string): Promise<Game | null> {
   await requireUserId()
   const { data, error } = await supabase
@@ -88,16 +102,13 @@ export async function fetchGame(id: string): Promise<Game | null> {
     .maybeSingle()
   if (error) throw error
   if (!data) return null
-
   const players_count =
     Array.isArray((data as any).game_players) && (data as any).game_players.length
       ? Number((data as any).game_players[0].count)
       : 0
-
   return { ...(data as any), players_count }
 }
 
-/** Is current user a member of the game? */
 export async function amIMember(gameId: string): Promise<boolean> {
   const userId = await requireUserId()
   const { data, error } = await supabase
@@ -110,7 +121,6 @@ export async function amIMember(gameId: string): Promise<boolean> {
   return Boolean(data)
 }
 
-/** Join a game (if not full). */
 export async function joinGame(gameId: string) {
   const userId = await requireUserId()
   const g = await fetchGame(gameId)
@@ -118,10 +128,8 @@ export async function joinGame(gameId: string) {
   if (g.players_count !== undefined && g.seats !== undefined && g.players_count >= g.seats) {
     throw new Error('This game is full')
   }
-  // ignore if already member
   const isMember = await amIMember(gameId)
   if (isMember) return true
-
   const { error } = await supabase
     .from('game_players')
     .insert({ game_id: gameId, user_id: userId, role: 'player' })
@@ -129,7 +137,6 @@ export async function joinGame(gameId: string) {
   return true
 }
 
-/** Leave a game (removes your membership). */
 export async function leaveGame(gameId: string) {
   const userId = await requireUserId()
   const { error } = await supabase
@@ -141,7 +148,6 @@ export async function leaveGame(gameId: string) {
   return true
 }
 
-/** Delete game (host only). */
 export async function deleteGame(gameId: string) {
   await requireUserId()
   const { error } = await supabase.from('games').delete().eq('id', gameId)
@@ -149,7 +155,6 @@ export async function deleteGame(gameId: string) {
   return true
 }
 
-/** End game (host only) — mark completed. */
 export async function endGame(gameId: string) {
   await requireUserId()
   const { error } = await supabase
@@ -158,4 +163,40 @@ export async function endGame(gameId: string) {
     .eq('id', gameId)
   if (error) throw error
   return true
+}
+
+/* Profile helpers */
+
+export async function fetchMyHostedGames(): Promise<Game[]> {
+  const userId = await requireUserId()
+  const { data, error } = await supabase
+    .from('games')
+    .select('id,host_id,title,system,poster_url,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count)')
+    .eq('host_id', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data as any[]).map((g) => ({
+    ...g,
+    players_count: Array.isArray(g.game_players) && g.game_players.length
+      ? Number(g.game_players[0].count)
+      : 0,
+  }))
+}
+
+export async function fetchMyJoinedGames(): Promise<Game[]> {
+  const userId = await requireUserId()
+  const { data, error } = await supabase
+    .from('game_players')
+    .select('game:games(id,host_id,title,system,poster_url,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count))')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const rows = (data as any[]) ?? []
+  return rows.map((r) => {
+    const g = r.game
+    const players_count = Array.isArray(g.game_players) && g.game_players.length
+      ? Number(g.game_players[0].count)
+      : 0
+    return { ...(g as any), players_count }
+  })
 }
