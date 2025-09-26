@@ -1,20 +1,21 @@
 // File: frontend/src/app/lobbies/[id]/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { fetchGame, joinGame, leaveGame, deleteGame, endGame, Game } from '@/lib/games'
+import { deleteGame, endGame, fetchGame, joinGame, leaveGame, Game } from '@/lib/games'
 
+type ProfileLite = {
+  id: string
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+}
 type Player = {
   user_id: string
   role: 'host' | 'player' | string
-  user?: {
-    id: string
-    username: string | null
-    display_name: string | null
-    avatar_url: string | null
-  } | null
+  user?: ProfileLite | null
 }
 
 export default function LobbyDetailPage() {
@@ -44,7 +45,7 @@ export default function LobbyDetailPage() {
   }, [])
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.replace(`/login?next=${encodeURIComponent(`/lobbies/${id}`)}`)
@@ -70,17 +71,35 @@ export default function LobbyDetailPage() {
     await loadPlayers()
   }
 
+  // ---- FIX: fetch memberships, then fetch profiles, then merge ----
   async function loadPlayers() {
-    const { data, error } = await supabase
+    const { data: memberships, error } = await supabase
       .from('game_players')
-      .select('user_id, role, user:profiles(id, username, display_name, avatar_url)')
+      .select('user_id, role')
       .eq('game_id', id)
       .order('created_at', { ascending: true })
     if (error) throw error
-    setPlayers((data as Player[]) || [])
+
+    const ids = Array.from(new Set((memberships ?? []).map((m: any) => m.user_id).filter(Boolean)))
+    let index: Record<string, ProfileLite> = {}
+    if (ids.length) {
+      const { data: profs, error: pErr } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', ids)
+      if (pErr) throw pErr
+      index = Object.fromEntries((profs ?? []).map(p => [p.id, p as ProfileLite]))
+    }
+
+    const merged: Player[] = (memberships ?? []).map((m: any) => ({
+      user_id: m.user_id,
+      role: m.role,
+      user: index[m.user_id] ?? null,
+    }))
+    setPlayers(merged)
   }
 
-  const playersCount = game?.players_count ?? players.length
+  const playersCount = players.length // more accurate than cached aggregate
   const remain = Math.max(0, (game?.seats ?? 0) - playersCount)
   const full = remain <= 0 || game?.status !== 'open'
   const isOwner = useMemo(() => Boolean(game && me && game.host_id === me), [game, me])
@@ -163,6 +182,12 @@ export default function LobbyDetailPage() {
     )
   }
 
+  const lengthText = game.length_min
+    ? (game.length_min >= 60
+        ? `${(game.length_min / 60).toFixed(game.length_min % 60 ? 1 : 0)} h`
+        : `${game.length_min} min`)
+    : '—'
+
   return (
     <Shell>
       <TopBanner />
@@ -189,7 +214,7 @@ export default function LobbyDetailPage() {
                 Actions ▾
               </button>
               {ownerMenuOpen && (
-                <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
+                <div className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
                   <button
                     disabled={working}
                     onClick={() => { setOwnerMenuOpen(false); void doEnd() }}
@@ -209,7 +234,7 @@ export default function LobbyDetailPage() {
             </div>
           )}
 
-          {/* Title & stats (bottom overlay) */}
+          {/* Title & seats (bottom overlay) */}
           <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-white">{game.title}</h1>
@@ -226,7 +251,7 @@ export default function LobbyDetailPage() {
           {/* Info grid */}
           <div className="grid sm:grid-cols-2 gap-4">
             <Info label="Status" value={titleCase(game.status)} />
-            <Info label="Length" value={game.length_min ? `${game.length_min} min` : '—'} />
+            <Info label="Length" value={lengthText} />
             <Info label="New players" value={game.welcomes_new ? 'Yes' : 'No'} />
             <Info label="18+" value={game.is_mature ? 'Yes' : 'No'} />
           </div>
@@ -367,4 +392,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
