@@ -1,3 +1,4 @@
+// File: frontend/src/app/profile/page.tsx
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -183,7 +184,7 @@ export default function ProfileDashboard() {
       <div className="mt-8">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Your games</h2>
-          <a href="/schedule/new" className="text-sm text-brand hover:text-brandHover">Post a game →</a>
+          {/* Removed the "Post a game →" link here */}
         </div>
 
         {gamesLoading ? (
@@ -412,4 +413,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
