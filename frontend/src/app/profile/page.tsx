@@ -319,14 +319,19 @@ function GameCard({
     ? new Date(game.scheduled_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null
 
+  const lobbyHref = `/lobbies/${game.id}`
+
   return (
     <div className="rounded-2xl border border-white/10 bg-zinc-900/60 overflow-hidden">
       <div className="relative">
-        <img
-          src={game.poster_url || '/game-poster-fallback.jpg'}
-          alt={game.title || 'Game'}
-          className="h-40 w-full object-cover"
-        />
+        {/* Make poster clickable to the lobby */}
+        <a href={lobbyHref} className="block">
+          <img
+            src={game.poster_url || '/game-poster-fallback.jpg'}
+            alt={game.title || 'Game'}
+            className="h-40 w-full object-cover"
+          />
+        </a>
         <div className="absolute top-2 right-2" ref={ref}>
           <button
             onClick={() => setOpen(v => !v)}
@@ -337,14 +342,23 @@ function GameCard({
             Settings ▾
           </button>
           {open && (
-            <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white">
+            <div className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white">
               {game.isOwner ? (
-                <button
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
-                  onClick={() => onDelete(game.id)}
-                >
-                  Delete game
-                </button>
+                <>
+                  <a
+                    href={`/lobbies/${game.id}/edit`}
+                    className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+                    onClick={() => setOpen(false)}
+                  >
+                    Edit details
+                  </a>
+                  <button
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300"
+                    onClick={() => onDelete(game.id)}
+                  >
+                    Delete game
+                  </button>
+                </>
               ) : (
                 <button
                   className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
@@ -358,7 +372,10 @@ function GameCard({
         </div>
       </div>
       <div className="px-4 py-3">
-        <div className="text-base font-semibold truncate">{game.title || 'Untitled game'}</div>
+        {/* Make title clickable too */}
+        <a href={lobbyHref} className="text-base font-semibold truncate hover:underline">
+          {game.title || 'Untitled game'}
+        </a>
         <div className="text-sm text-white/70 mt-0.5">
           {game.system || 'TTRPG'}{when ? ` • ${when}` : ''}{game.status ? ` • ${game.status}` : ''}
         </div>
