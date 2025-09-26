@@ -1,4 +1,3 @@
-// File: frontend/src/app/live/players/page.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -73,13 +72,20 @@ export default function LivePlayersPage() {
 
         if (!cancelled) {
           setMapPath(d)
-          setProjFn(() => (lon: number, lat: number) => {
+
+          // Properly-typed projection function returning a tuple
+          const proj: (lon: number, lat: number) => [number, number] | null = (lon, lat) => {
             try {
-              const p = projection([lon, lat])
-              if (!p || !isFinite(p[0]) || !isFinite(p[1])) return null
+              const p = projection([lon, lat]) as [number, number] | null
+              if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return null
               return [p[0], p[1]]
-            } catch { return null }
-          })
+            } catch {
+              return null
+            }
+          }
+
+          // Wrap so React doesn't treat it as an updater
+          setProjFn(() => proj)
           setReady(true)
         }
       } catch (e: any) {
@@ -253,4 +259,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
