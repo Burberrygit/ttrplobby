@@ -34,7 +34,6 @@ export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
   const roomId = useMemo(() => {
-    // path pattern /live/[id] — Next provides the segment as param via URL; since we’re client-only, parse from location
     if (typeof window !== 'undefined') {
       const parts = window.location.pathname.split('/')
       return parts[parts.length - 1]
@@ -52,6 +51,7 @@ export default function LiveRoomPage() {
   const [peers, setPeers] = useState<Array<{ id: string; name: string; avatar: string | null }>>([])
   const [chat, setChat] = useState<ChatMsg[]>([])
   const [text, setText] = useState('')
+  const [rtStatus, setRtStatus] = useState<'connecting' | 'connected' | 'error' | 'closed'>('connecting')
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
@@ -63,13 +63,26 @@ export default function LiveRoomPage() {
         return
       }
       // Pull profile fields if present
-      const { data: prof } = await supabase.from('profiles').select('display_name, username, avatar_url').eq('id', user.id).maybeSingle()
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('display_name, username, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle()
       const name = prof?.display_name || prof?.username || 'Player'
       setMe({ id: user.id, name, avatar: prof?.avatar_url ?? null })
 
       // Load room (if discoverable)
-      const { data: roomRow, error } = await supabase.from('live_rooms').select('*').eq('id', roomId).maybeSingle()
-      if (!error && roomRow) setRoom(roomRow as RoomDetails)
+      const { data: roomRow, error } = await supabase
+        .from('live_rooms')
+        .select('*')
+        .eq('id', roomId)
+        .maybeSingle()
+
+      if (error) {
+        setErrorMsg(error.message)
+      } else if (roomRow) {
+        setRoom(roomRow as RoomDetails)
+      }
 
       // Join realtime channel
       const ch = supabase.channel(`live:room:${roomId}`, {
@@ -79,7 +92,6 @@ export default function LiveRoomPage() {
 
       ch.on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState()
-        // state is { [key: userId]: [{ ...presence }]}
         const list: Array<{ id: string; name: string; avatar: string | null }> = []
         for (const [uid, arr] of Object.entries(state)) {
           const latest = (arr as any[])[(arr as any[]).length - 1]
@@ -95,6 +107,7 @@ export default function LiveRoomPage() {
 
       await ch.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          setRtStatus('connected')
           await ch.track({ name, avatar: prof?.avatar_url ?? null })
           // announce join
           const hello: ChatMsg = {
@@ -106,6 +119,10 @@ export default function LiveRoomPage() {
             ts: Date.now()
           }
           ch.send({ type: 'broadcast', event: 'chat', payload: hello })
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setRtStatus('error')
+        } else if (status === 'CLOSED') {
+          setRtStatus('closed')
         }
       })
     })()
@@ -129,6 +146,8 @@ export default function LiveRoomPage() {
       text: t,
       ts: Date.now()
     }
+    // Local echo so the sender always sees their message immediately
+    setChat(prev => [...prev, msg].slice(-200))
     channelRef.current.send({ type: 'broadcast', event: 'chat', payload: msg })
     setText('')
   }
@@ -143,8 +162,15 @@ export default function LiveRoomPage() {
     router.push('/profile')
   }
 
+  function copyLobbyLink() {
+    try {
+      const url = `${location.origin}/live/${roomId}`
+      navigator.clipboard.writeText(url)
+      alert('Lobby link copied to clipboard')
+    } catch { /* ignore */ }
+  }
+
   const remainSeats = useMemo(() => {
-    // Presence size approximates active players; host counts as 1 participant
     const cap = room?.seats ?? 0
     const used = peers.length
     return Math.max(0, cap - used)
@@ -158,11 +184,18 @@ export default function LiveRoomPage() {
             <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
           <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 rounded-md text-xs border ${
+              rtStatus === 'connected' ? 'border-emerald-400 text-emerald-300' :
+              rtStatus === 'connecting' ? 'border-white/20 text-white/60' :
+              'border-red-400 text-red-300'
+            }`}>
+              {rtStatus === 'connected' ? 'Connected' : rtStatus === 'connecting' ? 'Connecting…' : 'Connection issue'}
+            </span>
             <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Back to profile</a>
             {isHost && (
               <Menu>
-                <a href="#" onClick={(e) => { e.preventDefault(); endLobby() }} className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300">End game</a>
-                <a href={`/live/${roomId}`} className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10">Copy lobby link</a>
+                <button onClick={copyLobbyLink} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10">Copy lobby link</button>
+                <button onClick={(e) => { e.preventDefault(); endLobby() }} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300">End game</button>
               </Menu>
             )}
           </div>
@@ -177,12 +210,20 @@ export default function LiveRoomPage() {
             alt={room?.title || 'Live game'}
             className="w-full h-56 object-cover"
           />
-          <div className="p-3 text-sm text-white/70 border-t border-white/10">
-            {room?.discord_url && (
-              <a href={room.discord_url} target="_blank" rel="noreferrer" className="inline-block mr-2 underline hover:opacity-90">Discord</a>
+          <div className="p-3 text-sm text-white/70 border-t border-white/10 flex items-center gap-3 flex-wrap">
+            {room?.discord_url ? (
+              <a href={room.discord_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                <span>Discord</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
             )}
-            {room?.game_url && (
-              <a href={room.game_url} target="_blank" rel="noreferrer" className="inline-block underline hover:opacity-90">Game link</a>
+            {room?.game_url ? (
+              <a href={room.game_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                <span>Game link</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Game link: not set</span>
             )}
           </div>
         </div>
@@ -190,24 +231,21 @@ export default function LiveRoomPage() {
         <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-5">
           <h1 className="text-2xl font-bold">{room?.title || 'Untitled live game'}</h1>
           <div className="text-white/70 mt-1">
-            {room?.system || 'TTRPG'} {room?.vibe ? `• ${room.vibe}` : ''} {room?.length_min ? `• ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
+            {room?.system || 'TTRPG'}
+            {room?.vibe ? ` • ${room.vibe}` : ''}
+            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
           </div>
           <div className="text-white/60 text-sm mt-2">
             Seats: {room?.seats ?? '—'} • In lobby: {peers.length} • Open seats: {remainSeats}
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {isHost ? (
-              <span className="px-3 py-1.5 rounded-lg border border-[#29e0e3] text-[#29e0e3] text-sm">Host controls enabled</span>
-            ) : (
-              <span className="px-3 py-1.5 rounded-lg border border-white/20 text-sm">You’re connected</span>
-            )}
-          </div>
+          {/* Removed "Host controls enabled" badge per request */}
+          {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
         </div>
       </section>
 
-      {/* Participants & Chat */}
+      {/* Participants & Notes */}
       <section className="max-w-6xl mx-auto px-4 pb-16 grid md:grid-cols-[260px,1fr] gap-5">
-        {/* Participants list (bottom-left feel on wide screens) */}
+        {/* Participants list */}
         <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
           <div className="text-sm font-semibold">Players</div>
           <div className="mt-2 space-y-2">
@@ -222,10 +260,11 @@ export default function LiveRoomPage() {
                 </div>
               </div>
             ))}
+            {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
           </div>
         </div>
 
-        {/* Main area could hold later: ready checks / notes / etc. For now, just some tips */}
+        {/* Main area placeholder */}
         <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 min-h-[200px]">
           <div className="text-sm text-white/70">
             Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
@@ -271,7 +310,7 @@ function ChatDock({
               <img src={m.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=0B0B0E&color=FFFFFF`} alt="" className="h-6 w-6 rounded-full object-cover mt-0.5" />
               <div className="min-w-0">
                 <div className="text-xs text-white/60">{m.name} <span className="opacity-50">• {new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-                <div className="text-sm">{m.text}</div>
+                <div className="text-sm break-words">{m.text}</div>
               </div>
             </div>
           ))}
@@ -345,3 +384,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
