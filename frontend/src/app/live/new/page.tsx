@@ -1,7 +1,7 @@
 // File: frontend/src/app/live/new/page.tsx
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -69,21 +69,37 @@ export default function LiveHostSetup() {
     if (!file) return
     try {
       setUploading(true)
-      // Preview
+      setErrorMsg(null)
+
+      // Preview immediately
       const reader = new FileReader()
       reader.onload = () => setLocalPosterPreview(reader.result as string)
       reader.readAsDataURL(file)
 
-      // Upload to 'posters' bucket (public-read)
-      const fn = `live/${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`
-      const { data, error } = await supabase.storage.from('posters').upload(fn, file, { upsert: false })
+      // Ensure we have the current user (RLS requires auth.uid())
+      const { data: { user }, error: authErr } = await supabase.auth.getUser()
+      if (authErr || !user) throw authErr || new Error('Sign in required to upload')
+
+      // IMPORTANT: Your Storage INSERT policy is "can upload to their own folder".
+      // That means the path MUST start with the user's UUID, e.g. `${user.id}/...`
+      const safeName = file.name.replace(/\s+/g, '-')
+      const ext = (safeName.split('.').pop() || 'jpg').toLowerCase()
+      const filePath = `${user.id}/${crypto.randomUUID()}.${ext}`
+
+      const { data, error } = await supabase.storage
+        .from('posters') // bucket must exist and be public
+        .upload(filePath, file, {
+          upsert: false, // keep false to avoid needing UPDATE policy
+          cacheControl: '3600',
+          contentType: file.type || 'application/octet-stream',
+        })
+
       if (error) throw error
 
-      // Get public URL
       const { data: pub } = supabase.storage.from('posters').getPublicUrl(data.path)
-      onChange('poster_url', pub.publicUrl)
+      onChange('poster_url', pub?.publicUrl || null)
     } catch (e: any) {
-      setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters")')
+      setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters" and RLS policies)')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -294,3 +310,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
