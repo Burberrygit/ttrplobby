@@ -175,8 +175,8 @@ export default function ProfileDashboard() {
       {/* Primary actions */}
       <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ActionCard href="/schedule" title="Search for games" desc="Find tables by system, vibe, time." icon={<SearchIcon />} />
-        <ActionCard href="/lobbies/new" title="Start live game" desc="Spin up an instant lobby." icon={<PlayIcon />} />
-        <ActionCard href="/lobbies" title="Join live game" desc="Jump into active tables." icon={<UsersIcon />} />
+        <ActionCard href="/live/new" title="Start live game" desc="Spin up an instant lobby." icon={<PlayIcon />} />
+        <ActionCard href="/live/join" title="Join live game" desc="Jump into active tables." icon={<UsersIcon />} />
         <ActionCard href="/schedule/new" title="Post a game" desc="Schedule a session for later." icon={<PlusCircleIcon />} />
       </div>
 
@@ -430,5 +430,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
