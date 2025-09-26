@@ -151,7 +151,7 @@ export default function ProfileDashboard() {
               )}
             </div>
 
-            {/* Edit only (❌ Menu removed) */}
+            {/* Edit only */}
             <div className="mt-4 md:mt-0 flex items-center gap-2">
               <a
                 href="/profile/edit"
@@ -180,11 +180,10 @@ export default function ProfileDashboard() {
         <ActionCard href="/schedule/new" title="Post a game" desc="Schedule a session for later." icon={<PlusCircleIcon />} />
       </div>
 
-      {/* 2) Your games section */}
+      {/* Your games */}
       <div className="mt-8">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Your games</h2>
-          {/* Removed the "Post a game →" link here */}
         </div>
 
         {gamesLoading ? (
