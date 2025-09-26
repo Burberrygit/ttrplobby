@@ -80,8 +80,7 @@ export default function LiveHostSetup() {
       const { data: { user }, error: authErr } = await supabase.auth.getUser()
       if (authErr || !user) throw authErr || new Error('Sign in required to upload')
 
-      // IMPORTANT: Your Storage INSERT policy is "can upload to their own folder".
-      // That means the path MUST start with the user's UUID, e.g. `${user.id}/...`
+      // IMPORTANT: path must start with the user's UUID to satisfy "own folder" policy
       const safeName = file.name.replace(/\s+/g, '-')
       const ext = (safeName.split('.').pop() || 'jpg').toLowerCase()
       const filePath = `${user.id}/${crypto.randomUUID()}.${ext}`
@@ -89,7 +88,7 @@ export default function LiveHostSetup() {
       const { data, error } = await supabase.storage
         .from('posters') // bucket must exist and be public
         .upload(filePath, file, {
-          upsert: false, // keep false to avoid needing UPDATE policy
+          upsert: false,
           cacheControl: '3600',
           contentType: file.type || 'application/octet-stream',
         })
@@ -131,7 +130,6 @@ export default function LiveHostSetup() {
         status: 'open'
       }, { onConflict: 'id' })
       if (error) {
-        // Show but do NOT block the session; we can still host without the listing
         console.warn('live_rooms upsert error:', error.message)
       }
     } catch (e: any) {
@@ -142,6 +140,9 @@ export default function LiveHostSetup() {
       router.push(`/live/${roomId}?host=1`)
     }
   }
+
+  // Helper for displaying/storing hours
+  const lengthHours = Math.max(0.5, (form.length_min || 0) / 60)
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 text-white">
@@ -225,11 +226,14 @@ export default function LiveHostSetup() {
               />
             </label>
             <label className="text-sm">
-              <div className="mb-1 text-white/70">Length (minutes)</div>
+              <div className="mb-1 text-white/70">Length (Hours)</div>
               <input
-                type="number" min={30} step={15}
-                value={form.length_min}
-                onChange={(e) => onChange('length_min', Math.max(15, Number(e.target.value || 0)))}
+                type="number" min={0.5} step={0.5}
+                value={lengthHours}
+                onChange={(e) => {
+                  const hours = Math.max(0.5, Number(e.target.value || 0))
+                  onChange('length_min', Math.round(hours * 60))
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
               />
             </label>
