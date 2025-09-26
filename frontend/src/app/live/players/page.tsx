@@ -14,12 +14,83 @@ type Presence = {
   avatar_url?: string | null
 }
 
+const BRAND = '#29e0e3'
+const BG = '#0b0b0e'
+
 export default function LivePlayersPage() {
   const [points, setPoints] = useState<Presence[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Load initial + subscribe to realtime changes
+  const [mapPath, setMapPath] = useState<string>('')        // countries outline path (single path)
+  const [projFn, setProjFn] = useState<((lon: number, lat: number) => [number, number] | null) | null>(null)
+  const [ready, setReady] = useState(false)
+
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const [size, setSize] = useState<{w:number,h:number}>({ w: 1200, h: 600 })
+
+  // --- measure container and recompute projection on resize
+  useEffect(() => {
+    function measure() {
+      const el = wrapRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      // keep a pleasant 2:1 aspect but fill width
+      const w = Math.max(600, Math.floor(r.width))
+      const h = Math.max(300, Math.floor(r.width / 2))
+      setSize({ w, h })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (wrapRef.current) ro.observe(wrapRef.current)
+    window.addEventListener('resize', measure)
+    return () => {
+      window.removeEventListener('resize', measure)
+      ro.disconnect()
+    }
+  }, [])
+
+  // --- build map projection + outline path (client-only)
+  useEffect(() => {
+    let cancelled = false
+    async function build() {
+      try {
+        // dynamic imports keep SSR bundle light
+        const d3 = await import('d3-geo')
+        const topo = await import('topojson-client')
+        // TopoJSON (Natural Earth) — countries at 1:110m resolution
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - JSON import type
+        const world = (await import('world-atlas/countries-110m.json')).default as any
+
+        const projection = d3.geoEquirectangular().fitSize([size.w, size.h], { type: 'Sphere' } as any)
+        const path = d3.geoPath(projection as any)
+
+        // a single MultiLineString for country borders (a !== b gives borders only)
+        const borders = topo.mesh(world, world.objects.countries, (a: any, b: any) => a !== b)
+
+        const d = path(borders as any) || ''
+
+        if (!cancelled) {
+          setMapPath(d)
+          setProjFn(() => (lon: number, lat: number) => {
+            try {
+              const p = projection([lon, lat])
+              if (!p || !isFinite(p[0]) || !isFinite(p[1])) return null
+              return [p[0], p[1]]
+            } catch { return null }
+          })
+          setReady(true)
+        }
+      } catch (e: any) {
+        setErrorMsg(e?.message || 'Failed to load map libraries')
+      }
+    }
+    build()
+    return () => { cancelled = true }
+  }, [size.w, size.h])
+
+  // --- presence load (Option A: 2 queries, no FK requirement)
   useEffect(() => {
     let mounted = true
 
@@ -27,7 +98,6 @@ export default function LivePlayersPage() {
       setErrorMsg(null)
       setLoading(true)
       try {
-        // 1) pull presence rows active in the last 2 minutes
         const sinceIso = new Date(Date.now() - 2 * 60 * 1000).toISOString()
         const { data: pres, error: perr } = await supabase
           .from('live_presence')
@@ -43,7 +113,7 @@ export default function LivePlayersPage() {
           updated_at: r.updated_at,
         }))
 
-        // 2) fetch profiles for those user_ids (names/avatars)
+        // fetch basic profiles for labels/avatars
         const ids = Array.from(new Set(base.map(b => b.user_id))).filter(Boolean)
         let byId: Record<string, { display_name: string | null, avatar_url: string | null }> = {}
         if (ids.length) {
@@ -98,43 +168,48 @@ export default function LivePlayersPage() {
       <TopBar />
 
       <h1 className="text-2xl font-bold">Live players</h1>
-      <p className="text-white/70 mt-1">
-        Connected users hosting or joining live games right now.
-      </p>
+      <p className="text-white/70 mt-1">Connected users hosting or joining live games right now.</p>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-black/95 overflow-hidden relative aspect-[2/1]">
-        {/* Optional land silhouette — place /public/world-map.svg for outlines */}
-        <img
-          src="/world-map.svg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover opacity-25 pointer-events-none select-none"
-          onError={(e) => {
-            // If the svg isn’t present, keep a plain black background.
-            (e.target as HTMLImageElement).style.display = 'none'
-          }}
-        />
+      <div
+        ref={wrapRef}
+        className="mt-4 rounded-2xl border border-white/10 overflow-hidden"
+        style={{ background: BG }}
+      >
+        {/* SVG map */}
+        <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} role="img" aria-label="World map">
+          {/* Optional subtle globe arc vignette */}
+          <defs>
+            <filter id="glow">
+              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={BRAND} floodOpacity="0.8" />
+            </filter>
+          </defs>
 
-        {/* Dots */}
-        {active.map((p) => {
-          const left = lonToPercent(p.lon!)
-          const top = latToPercent(p.lat!)
-          return (
-            <div
-              key={`${p.user_id}-${p.room_id ?? 'none'}`}
-              className="absolute"
-              style={{ left: `${left}%`, top: `${top}%` }}
-              title={p.display_name ?? 'Player'}
-            >
-              <div className="h-2 w-2 rounded-full bg-[#29e0e3] shadow-[0_0_10px_2px_rgba(41,224,227,0.7)]" />
-            </div>
-          )
-        })}
+          {/* Country borders outline */}
+          {ready && (
+            <path
+              d={mapPath}
+              fill="none"
+              stroke={BRAND}
+              strokeOpacity="0.7"
+              strokeWidth={1}
+            />
+          )}
 
-        {/* Empty state */}
-        {!loading && active.length === 0 && (
-          <div className="absolute inset-0 grid place-items-center text-white/60 text-sm">
-            No live users yet.
-          </div>
+          {/* Presence dots */}
+          {ready && projFn && active.map((p) => {
+            const xy = projFn(p.lon!, p.lat!)
+            if (!xy) return null
+            return (
+              <g key={`${p.user_id}-${p.room_id ?? 'none'}`} transform={`translate(${xy[0]},${xy[1]})`} >
+                <circle r="3" fill={BRAND} filter="url(#glow)" />
+                <title>{p.display_name || 'Player'}</title>
+              </g>
+            )
+          })}
+        </svg>
+
+        {!loading && ready && active.length === 0 && (
+          <div className="p-3 text-white/60 text-sm">No live users yet.</div>
         )}
       </div>
 
@@ -179,15 +254,3 @@ function LogoIcon() {
   )
 }
 
-/* ------------------------------ helpers ------------------------------ */
-
-/** Equirectangular projection → percentage from left */
-function lonToPercent(lon: number) {
-  // lon ∈ [-180, 180]
-  return ((lon + 180) / 360) * 100
-}
-/** Equirectangular projection → percentage from top */
-function latToPercent(lat: number) {
-  // lat ∈ [-90, 90]
-  return ((90 - lat) / 180) * 100
-}
