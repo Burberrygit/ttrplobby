@@ -31,7 +31,7 @@ export default function LivePlayersPage() {
   const [ready, setReady] = useState(false)
 
   const wrapRef = useRef<HTMLDivElement | null>(null)
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: 1200, h: 600 })
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 1200, h: 624 }) // Natural Earth ~1.9:1
 
   // --- measure container and recompute projection on resize
   useEffect(() => {
@@ -40,7 +40,8 @@ export default function LivePlayersPage() {
       if (!el) return
       const r = el.getBoundingClientRect()
       const w = Math.max(600, Math.floor(r.width))
-      const h = Math.max(300, Math.floor(r.width / 2)) // pleasant 2:1 aspect
+      // Natural Earth looks best a bit taller than 2:1; ~0.52 height ratio works well.
+      const h = Math.max(300, Math.floor(r.width * 0.52))
       setSize({ w, h })
     }
     measure()
@@ -71,8 +72,8 @@ export default function LivePlayersPage() {
 
         const landFc = topo.feature(landTopo, landTopo.objects.land) as any
 
-        // Fit the projection to the LAND (so we get coastlines fully)
-        const projection = d3.geoEquirectangular().fitSize([size.w, size.h], landFc)
+        // Use Natural Earth for a less-stretched look
+        const projection = d3.geoNaturalEarth1().fitSize([size.w, size.h], landFc)
         const path = d3.geoPath(projection as any)
 
         // Path for the land outline (coastlines)
@@ -86,7 +87,6 @@ export default function LivePlayersPage() {
           setLandPath(landD)
           setBordersPath(bordersD)
 
-          // Properly-typed projection function returning a tuple
           const proj: (lon: number, lat: number) => [number, number] | null = (lon, lat) => {
             try {
               const p = projection([lon, lat]) as [number, number] | null
@@ -97,7 +97,6 @@ export default function LivePlayersPage() {
             }
           }
 
-          // Wrap so React doesn't treat it as an updater
           setProjFn(() => proj)
           setReady(true)
         }
@@ -134,7 +133,7 @@ export default function LivePlayersPage() {
           updated_at: r.updated_at,
         }))
 
-        // fetch basic profiles for labels/avatars
+        // fetch basic profiles for labels/avatars (kept for future use, but we no longer show tooltips)
         const ids = Array.from(new Set(base.map(b => b.user_id))).filter(Boolean)
         let byId: Record<string, { display_name: string | null; avatar_url: string | null }> = {}
         if (ids.length) {
@@ -201,7 +200,6 @@ export default function LivePlayersPage() {
       >
         {/* SVG map */}
         <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} role="img" aria-label="World map">
-          {/* Optional subtle glow for dots */}
           <defs>
             <filter id="glow">
               <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={BRAND} floodOpacity="0.8" />
@@ -230,7 +228,7 @@ export default function LivePlayersPage() {
             />
           )}
 
-          {/* Presence dots */}
+          {/* Presence dots (no tooltip/title) */}
           {ready &&
             projFn &&
             active.map(p => {
@@ -239,7 +237,6 @@ export default function LivePlayersPage() {
               return (
                 <g key={`${p.user_id}-${p.room_id ?? 'none'}`} transform={`translate(${xy[0]},${xy[1]})`}>
                   <circle r="3" fill={BRAND} filter="url(#glow)" />
-                  <title>{p.display_name || 'Player'}</title>
                 </g>
               )
             })}
@@ -290,3 +287,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
