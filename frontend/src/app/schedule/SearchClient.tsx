@@ -1,7 +1,7 @@
 // File: frontend/src/app/schedule/SearchClient.tsx
 'use client'
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -12,7 +12,7 @@ type Game = {
   system: string | null
   poster_url: string | null
   scheduled_at: string | null
-  status: 'draft' | 'open' | 'full' | 'completed' | 'cancelled' | string
+  status: string
   seats: number
   length_min: number | null
   vibe: string | null
@@ -31,10 +31,8 @@ const SYSTEMS = [
   'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
 ] as const
 
-const STATUSES = ['Any','open','completed','draft','cancelled'] as const
 const SORTS = ['Relevance','Soonest','Newest','Popular'] as const
 
-// Curated IANA TZs
 const COMMON_TZS = [
   'UTC',
   'America/Toronto','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
@@ -51,17 +49,12 @@ export default function SearchClient() {
   const params = useSearchParams()
 
   const MY_TZ = useMemo(() => getBrowserTz(), [])
-  const TZ_OPTIONS = useMemo(() => ['Any', 'local', ...COMMON_TZS] as string[], [])
-  const tzLabels = useMemo<Record<string, string>>(
-    () => ({ local: `Local (auto: ${MY_TZ})` }),
-    [MY_TZ]
-  )
+  const tzLabelLocal = `Local (auto: ${MY_TZ})`
 
   // --- filters (seed from URL) ---
   const [q, setQ] = useState(decode(params.get('q') || ''))
   const [system, setSystem] = useState<string>(params.get('system') || 'Any')
-  const [status, setStatus] = useState<string>(params.get('status') || 'open')
-  const [onlySeats, setOnlySeats] = useState(params.get('seats') === 'open')
+  const [onlySeats, setOnlySeats] = useState(params.get('seats') === 'open')       // from old link format
   const [welcomesNew, setWelcomesNew] = useState(params.get('new') === '1')
   const [mature, setMature] = useState(params.get('mature') === '1')
   const [sortBy, setSortBy] = useState<string>(params.get('sort') || 'Relevance')
@@ -83,7 +76,7 @@ export default function SearchClient() {
     }, 300)
   }
 
-  // reflect filter changes in URL (no reload)
+  // reflect filter changes in URL (without full reload)
   function updateUrl() {
     const u = new URL(window.location.href)
     const set = (k: string, v?: string | boolean) => {
@@ -92,7 +85,6 @@ export default function SearchClient() {
     }
     set('q', q)
     set('system', system !== 'Any' ? system : undefined)
-    set('status', status !== 'Any' ? status : undefined)
     set('seats', onlySeats ? 'open' : undefined)
     set('new', welcomesNew ? '1' : undefined)
     set('mature', mature ? '1' : undefined)
@@ -120,15 +112,17 @@ export default function SearchClient() {
     setLoading(true)
     void load().finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [system, status, onlySeats, welcomesNew, mature, sortBy, tz])
+  }, [system, onlySeats, welcomesNew, mature, sortBy, tz])
 
   async function load() {
     try {
       setErrorMsg(null)
-      // Include optional columns like time_zone if present
+
+      // default to OPEN games only (no UI control for status)
       let query = supabase
         .from('games')
         .select('*, game_players(count)')
+        .eq('status', 'open')
         .limit(60)
 
       // text search across title/system/vibe
@@ -140,7 +134,6 @@ export default function SearchClient() {
       }
 
       if (system && system !== 'Any') query = query.eq('system', system)
-      if (status && status !== 'Any') query = query.eq('status', status)
 
       // Base order depending on sort
       if (sortBy === 'Soonest') {
@@ -201,7 +194,6 @@ export default function SearchClient() {
   const resetFilters = () => {
     setQ('')
     setSystem('Any')
-    setStatus('open')
     setOnlySeats(false)
     setWelcomesNew(false)
     setMature(false)
@@ -212,63 +204,62 @@ export default function SearchClient() {
   const effectiveTz = tz === 'Any' || tz === 'local' ? MY_TZ : tz
 
   return (
-    <Shell>
-      <TopBanner />
-
+    <>
       <h1 className="text-2xl font-bold text-white">Search games</h1>
       <p className="text-white/70 mt-1">Find a table by title, system, vibe, time zone, or availability.</p>
 
-      {/* Search + Filters Bar */}
+      {/* Search + Filters Bar (no dropdowns; everything inline) */}
       <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          <div className="flex-1">
-            <label className="sr-only">Search</label>
-            <div className="flex items-center gap-2 rounded-xl bg-zinc-950 border border-white/10 px-3 py-2">
-              <SearchIcon />
-              <input
-                value={q}
-                onChange={(e) => setQDebounced(e.target.value)}
-                placeholder="Search titles, systems, vibes…"
-                className="bg-transparent outline-none text-white placeholder:text-white/40 flex-1"
-              />
-              {q && (
-                <button className="text-white/60 hover:text-white" onClick={() => { setQ(''); updateUrl(); void load() }}>
-                  Clear
-                </button>
-              )}
+        <div className="grid gap-3">
+          {/* Row 1: query + core selects */}
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="flex-1">
+              <label className="sr-only">Search</label>
+              <div className="flex items-center gap-2 rounded-xl bg-zinc-950 border border-white/10 px-3 py-2">
+                <SearchIcon />
+                <input
+                  value={q}
+                  onChange={(e) => setQDebounced(e.target.value)}
+                  placeholder="Search titles, systems, vibes…"
+                  className="bg-transparent outline-none text-white placeholder:text-white/40 flex-1"
+                />
+                {q && (
+                  <button className="text-white/60 hover:text-white" onClick={() => { setQ(''); updateUrl(); void load() }}>
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
             <Select value={system} onChange={setSystem} label="System" options={SYSTEMS as unknown as string[]} />
-            <Select value={status} onChange={setStatus} label="Status" options={STATUSES as unknown as string[]} />
             <Select value={sortBy} onChange={setSortBy} label="Sort" options={SORTS as unknown as string[]} />
             <Select
               value={tz}
               onChange={setTz}
               label="Time zone"
-              options={TZ_OPTIONS}
-              labels={tzLabels}
+              options={['Any', 'local', ...COMMON_TZS] as unknown as string[]}
+              labels={{ local: tzLabelLocal }}
             />
-            <FiltersPopover>
-              <div className="grid gap-3 p-3 text-sm">
-                <label className="inline-flex items-center gap-2">
-                  <input type="checkbox" className="accent-brand" checked={onlySeats} onChange={e => setOnlySeats(e.target.checked)} />
-                  <span>Only show games with open seats</span>
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e => setWelcomesNew(e.target.checked)} />
-                  <span>Welcomes new players</span>
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input type="checkbox" className="accent-brand" checked={mature} onChange={e => setMature(e.target.checked)} />
-                  <span>18+ content</span>
-                </label>
-                <div className="pt-2">
-                  <button onClick={resetFilters} className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Reset all</button>
-                </div>
-              </div>
-            </FiltersPopover>
+          </div>
+
+          {/* Row 2: inline toggles (formerly in Filters dropdown) */}
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" className="accent-brand" checked={onlySeats} onChange={e => setOnlySeats(e.target.checked)} />
+              <span>Only show games with open seats</span>
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e => setWelcomesNew(e.target.checked)} />
+              <span>Welcomes new players</span>
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" className="accent-brand" checked={mature} onChange={e => setMature(e.target.checked)} />
+              <span>18+ content</span>
+            </label>
+
+            <button onClick={resetFilters} className="ml-auto px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+              Reset all
+            </button>
           </div>
         </div>
       </div>
@@ -293,25 +284,11 @@ export default function SearchClient() {
           </div>
         )}
       </div>
-    </Shell>
+    </>
   )
 }
 
 /* --------------------------------- UI --------------------------------- */
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="max-w-6xl mx-auto px-4 py-8 text-white">{children}</div>
-}
-
-function TopBanner() {
-  return (
-    <div className="mb-4">
-      <a href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
-        <LogoIcon /><span className="font-semibold">ttrplobby</span>
-      </a>
-    </div>
-  )
-}
 
 function Select({ value, onChange, label, options, labels }: {
   value: string, onChange: (v: string) => void, label: string, options: string[], labels?: Record<string,string>
@@ -330,34 +307,7 @@ function Select({ value, onChange, label, options, labels }: {
   )
 }
 
-function FiltersPopover({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (!ref.current) return; if (!ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="px-3 py-2 rounded-xl border border-white/20 hover:border-white/40"
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        Filters ▾
-      </button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl text-white z-10">
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function GameCard({ g, tz }: { g: Game, tz: string }) {
+function GameCard({ g, tz }: { g: any, tz: string }) {
   const remain = Math.max(0, (g.seats ?? 0) - (g.players_count ?? 0))
   const full = remain <= 0 || g.status !== 'open'
   const lengthText = g.length_min
@@ -392,7 +342,7 @@ function GameCard({ g, tz }: { g: Game, tz: string }) {
   )
 }
 
-/* --------------------------- icons & helpers --------------------------- */
+/* --------------------------- Inline icons --------------------------- */
 
 function SearchIcon() {
   return (
@@ -402,15 +352,8 @@ function SearchIcon() {
     </svg>
   )
 }
-function LogoIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="12" cy="12" r="2" fill="currentColor" />
-    </svg>
-  )
-}
 
+/* --------------------------- helpers --------------------------- */
 function decode(s: string) {
   try { return decodeURIComponent(s) } catch { return s }
 }
@@ -440,3 +383,4 @@ function fmtDateInTz(iso: string, tz: string): string {
     return d.toLocaleString()
   }
 }
+
