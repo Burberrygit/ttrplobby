@@ -145,6 +145,40 @@ export default function LiveRoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId])
 
+  // Presence heartbeat → populate /live/players map
+  useEffect(() => {
+    if (!me.id || !roomId) return
+    let mounted = true
+    let timer: any
+
+    async function pingOnce() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || !mounted) return
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          if (!mounted) return
+          const lat = pos.coords.latitude
+          const lon = pos.coords.longitude
+          await supabase.from('live_presence').upsert(
+            {
+              user_id: user.id,
+              room_id: roomId,
+              lat, lon,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,room_id' }
+          )
+        }, () => {
+          // silently ignore if permission denied
+        }, { maximumAge: 60_000, timeout: 10_000 })
+      } catch { /* ignore */ }
+    }
+
+    void pingOnce()
+    timer = setInterval(pingOnce, 30_000)
+    return () => { mounted = false; clearInterval(timer) }
+  }, [me.id, roomId])
+
   async function send() {
     const t = text.trim()
     if (!t || !channelRef.current) return
@@ -397,4 +431,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
