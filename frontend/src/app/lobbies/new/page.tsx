@@ -9,16 +9,22 @@ import { createGame } from '@/lib/games'
 export default function NewLobbyPage() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
 
   // form state
   const [title, setTitle] = useState('')
   const [system, setSystem] = useState('D&D 5e (2014)')
-  const [poster, setPoster] = useState('')
   const [seats, setSeats] = useState(5)
   const [lengthMin, setLengthMin] = useState<number>(120)
   const [vibe, setVibe] = useState('Casual one-shot')
   const [welcomesNew, setWelcomesNew] = useState(true)
   const [isMature, setIsMature] = useState(false)
+
+  // image upload state
+  const [posterFile, setPosterFile] = useState<File | null>(null)
+  const [posterPreview, setPosterPreview] = useState<string>('')
+
+  // control state
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -30,19 +36,63 @@ export default function NewLobbyPage() {
         router.replace(`/login?next=${next}`)
         return
       }
+      setUserId(user.id)
       setAuthChecked(true)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function onPickPoster(file?: File | null) {
+    if (!file) {
+      setPosterFile(null)
+      setPosterPreview('')
+      return
+    }
+    // Basic validation
+    const MAX_MB = 5
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select an image file.')
+      return
+    }
+    if (file.size > MAX_MB * 1024 * 1024) {
+      setErrorMsg(`Image must be under ${MAX_MB} MB.`)
+      return
+    }
+    setErrorMsg(null)
+    setPosterFile(file)
+    setPosterPreview(URL.createObjectURL(file))
+  }
+
+  async function uploadPosterIfNeeded(): Promise<string | null> {
+    if (!posterFile || !userId) return null
+    const ext = (() => {
+      const n = posterFile.name.toLowerCase()
+      const maybe = n.includes('.') ? n.split('.').pop()! : ''
+      return maybe || 'jpg'
+    })()
+    const path = `${userId}/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase
+      .storage
+      .from('posters')               // <- make sure you created a public bucket named "posters"
+      .upload(path, posterFile, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: posterFile.type || 'image/*',
+      })
+    if (upErr) throw upErr
+    const { data } = supabase.storage.from('posters').getPublicUrl(path)
+    return data.publicUrl || null
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true); setErrorMsg(null)
     try {
+      const poster_url = await uploadPosterIfNeeded()
       const id = await createGame({
         title: title || 'Untitled game',
         system,
-        poster_url: poster || null,
+        poster_url: poster_url ?? null,
         seats,
         length_min: lengthMin,
         vibe,
@@ -74,36 +124,77 @@ export default function NewLobbyPage() {
             <input className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                    value={title} onChange={e=>setTitle(e.target.value)} placeholder="Beginner-friendly one-shot" required />
           </Field>
+
           <Field label="System">
             <select className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                     value={system} onChange={e=>setSystem(e.target.value)}>
               {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </Field>
-          <Field label="Poster image URL (optional)">
-            <input className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
-                   value={poster} onChange={e=>setPoster(e.target.value)} placeholder="https://…/poster.jpg" />
-          </Field>
+
+          {/* Poster upload */}
+          <div className="md:col-span-2">
+            <label className="grid gap-2 text-sm">
+              <span className="text-white/70">Poster image</span>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-28 w-48 rounded-xl bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
+                    {posterPreview ? (
+                      <img src={posterPreview} alt="Preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-white/50 text-xs">No image selected</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => onPickPoster(e.target.files?.[0] || null)}
+                      />
+                      Choose image…
+                    </label>
+                    {posterPreview && (
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40"
+                        onClick={() => onPickPoster(null)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                    <div className="text-white/50 text-xs">PNG/JPG/WebP, up to 5MB.</div>
+                  </div>
+                </div>
+              </div>
+            </label>
+          </div>
+
           <Field label="Seats">
             <input type="number" min={1} max={10}
                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                    value={seats} onChange={e=>setSeats(parseInt(e.target.value || '1', 10))} />
           </Field>
+
           <Field label="Length (minutes)">
             <input type="number" min={30} max={480} step={15}
                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                    value={lengthMin} onChange={e=>setLengthMin(parseInt(e.target.value || '60', 10))} />
           </Field>
+
           <Field label="Vibe (short description)">
             <input className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                    value={vibe} onChange={e=>setVibe(e.target.value)} placeholder="Casual, rules-light, beginner friendly" />
           </Field>
+
           <Field label="New players welcome?">
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e=>setWelcomesNew(e.target.checked)} />
               <span>Yes</span>
             </label>
           </Field>
+
           <Field label="18+ content?">
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" className="accent-brand" checked={isMature} onChange={e=>setIsMature(e.target.checked)} />
@@ -159,3 +250,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
