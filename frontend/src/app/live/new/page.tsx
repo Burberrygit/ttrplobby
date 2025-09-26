@@ -24,6 +24,16 @@ const SYSTEMS = [
   'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
 ]
 
+/* Normalize user-provided external links */
+function normalizeExternalUrl(u?: string | null): string | null {
+  if (!u) return null
+  const s = u.trim()
+  if (!s) return null
+  if (/^[a-z]+:\/\//i.test(s)) return s
+  if (s.startsWith('//')) return 'https:' + s
+  return 'https://' + s.replace(/^\/*/, '')
+}
+
 export default function LiveHostSetup() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
@@ -69,36 +79,21 @@ export default function LiveHostSetup() {
     if (!file) return
     try {
       setUploading(true)
-      setErrorMsg(null)
-
-      // Preview immediately
+      // Preview
       const reader = new FileReader()
       reader.onload = () => setLocalPosterPreview(reader.result as string)
       reader.readAsDataURL(file)
 
-      // Ensure we have the current user (RLS requires auth.uid())
-      const { data: { user }, error: authErr } = await supabase.auth.getUser()
-      if (authErr || !user) throw authErr || new Error('Sign in required to upload')
-
-      // IMPORTANT: path must start with the user's UUID to satisfy "own folder" policy
-      const safeName = file.name.replace(/\s+/g, '-')
-      const ext = (safeName.split('.').pop() || 'jpg').toLowerCase()
-      const filePath = `${user.id}/${crypto.randomUUID()}.${ext}`
-
-      const { data, error } = await supabase.storage
-        .from('posters') // bucket must exist and be public
-        .upload(filePath, file, {
-          upsert: false,
-          cacheControl: '3600',
-          contentType: file.type || 'application/octet-stream',
-        })
-
+      // Upload to 'posters' bucket (public-read)
+      const fn = `live/${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`
+      const { data, error } = await supabase.storage.from('posters').upload(fn, file, { upsert: false })
       if (error) throw error
 
+      // Get public URL
       const { data: pub } = supabase.storage.from('posters').getPublicUrl(data.path)
-      onChange('poster_url', pub?.publicUrl || null)
+      onChange('poster_url', pub.publicUrl)
     } catch (e: any) {
-      setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters" and RLS policies)')
+      setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters")')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -111,8 +106,10 @@ export default function LiveHostSetup() {
     setErrorMsg(null)
     const roomId = crypto.randomUUID()
 
-    // Try to publish a discoverable room row (optional but recommended)
-    // Requires a table public.live_rooms with RLS allowing the owner to insert/update.
+    // Normalize links before saving
+    const discordUrl = normalizeExternalUrl(form.discord_url || undefined)
+    const gameUrl = normalizeExternalUrl(form.game_url || undefined)
+
     try {
       const { error } = await supabase.from('live_rooms').upsert({
         id: roomId,
@@ -124,8 +121,8 @@ export default function LiveHostSetup() {
         length_min: form.length_min,
         welcomes_new: form.welcomes_new,
         is_mature: form.is_mature,
-        discord_url: form.discord_url || null,
-        game_url: form.game_url || null,
+        discord_url: discordUrl,
+        game_url: gameUrl,
         poster_url: form.poster_url || null,
         status: 'open'
       }, { onConflict: 'id' })
@@ -136,13 +133,9 @@ export default function LiveHostSetup() {
       console.warn('live_rooms upsert failed:', e?.message)
     } finally {
       setSubmitting(false)
-      // Navigate to the actual live room; pass host=1 to show host controls
       router.push(`/live/${roomId}?host=1`)
     }
   }
-
-  // Helper for displaying/storing hours
-  const lengthHours = Math.max(0.5, (form.length_min || 0) / 60)
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 text-white">
@@ -228,10 +221,10 @@ export default function LiveHostSetup() {
             <label className="text-sm">
               <div className="mb-1 text-white/70">Length (Hours)</div>
               <input
-                type="number" min={0.5} step={0.5}
-                value={lengthHours}
+                type="number" min={0.5} step={0.25}
+                value={(form.length_min / 60).toString()}
                 onChange={(e) => {
-                  const hours = Math.max(0.5, Number(e.target.value || 0))
+                  const hours = Math.max(0.25, Number(e.target.value || 0))
                   onChange('length_min', Math.round(hours * 60))
                 }}
                 className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
@@ -264,7 +257,7 @@ export default function LiveHostSetup() {
               <input
                 value={form.discord_url || ''}
                 onChange={(e) => onChange('discord_url', e.target.value)}
-                placeholder="https://discord.gg/…"
+                placeholder="discord.gg/your-invite or https://discord.gg/…"
                 className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
               />
             </label>
@@ -273,7 +266,7 @@ export default function LiveHostSetup() {
               <input
                 value={form.game_url || ''}
                 onChange={(e) => onChange('game_url', e.target.value)}
-                placeholder="Roll20/Foundry/Alchemy link…"
+                placeholder="fvtt.life or https://your-vtt.example.com/…"
                 className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
               />
             </label>
@@ -314,4 +307,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
