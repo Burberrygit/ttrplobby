@@ -27,25 +27,43 @@ export default function LivePlayersPage() {
       setErrorMsg(null)
       setLoading(true)
       try {
-        // "Active" = pinged within the last 2 minutes
+        // 1) pull presence rows active in the last 2 minutes
         const sinceIso = new Date(Date.now() - 2 * 60 * 1000).toISOString()
-        const { data, error } = await supabase
+        const { data: pres, error: perr } = await supabase
           .from('live_presence')
-          .select('user_id, room_id, lat, lon, updated_at, profiles:profiles!inner(display_name, avatar_url)')
+          .select('user_id, room_id, lat, lon, updated_at')
           .gte('updated_at', sinceIso)
-        if (error) throw error
+        if (perr) throw perr
 
-        const mapped: Presence[] = (data as any[]).map((r) => ({
+        const base: Presence[] = (pres ?? []).map((r: any) => ({
           user_id: r.user_id,
           room_id: r.room_id ?? null,
           lat: r.lat ?? null,
           lon: r.lon ?? null,
           updated_at: r.updated_at,
-          display_name: r.profiles?.display_name ?? null,
-          avatar_url: r.profiles?.avatar_url ?? null,
         }))
 
-        if (mounted) setPoints(mapped)
+        // 2) fetch profiles for those user_ids (names/avatars)
+        const ids = Array.from(new Set(base.map(b => b.user_id))).filter(Boolean)
+        let byId: Record<string, { display_name: string | null, avatar_url: string | null }> = {}
+        if (ids.length) {
+          const { data: profs, error: perr2 } = await supabase
+            .from('profiles')
+            .select('id, display_name, avatar_url')
+            .in('id', ids)
+          if (perr2) throw perr2
+          byId = Object.fromEntries(
+            (profs ?? []).map((p: any) => [p.id, { display_name: p.display_name ?? null, avatar_url: p.avatar_url ?? null }])
+          )
+        }
+
+        const merged = base.map(p => ({
+          ...p,
+          display_name: byId[p.user_id]?.display_name ?? null,
+          avatar_url: byId[p.user_id]?.avatar_url ?? null,
+        }))
+
+        if (mounted) setPoints(merged)
       } catch (e: any) {
         if (mounted) setErrorMsg(e?.message || 'Failed to load live presence')
       } finally {
