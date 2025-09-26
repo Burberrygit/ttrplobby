@@ -2,10 +2,12 @@ import { supabase } from '@/lib/supabaseClient'
 
 export async function saveProfile({
   username,
+  display_name,          // ← add this
   avatar_url,
   bio,
 }: {
   username?: string
+  display_name?: string  // ← add this
   avatar_url?: string
   bio?: string
 }) {
@@ -16,8 +18,9 @@ export async function saveProfile({
     .from('profiles')
     .upsert(
       {
-        id: user.id,                      // must equal auth.user.id
+        id: user.id,
         username: username ?? null,
+        display_name: (display_name ?? username) ?? null, // ← your new field
         avatar_url: avatar_url ?? null,
         bio: bio ?? null,
       },
