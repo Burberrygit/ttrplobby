@@ -35,17 +35,34 @@ export default function LoginClient() {
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault()
+    const origin = window.location.origin
+    const next =
+      searchParams?.get('next') ||
+      (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
+    // Always carry `next` into the callback URL so the callback page can honor it.
+    const redirect = next
+      ? `${origin}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${origin}/auth/callback`
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
+      options: { emailRedirectTo: redirect }
     })
     setStatus(error ? error.message : 'Check your inbox for the sign-in link.')
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
+    const origin = window.location.origin
+    const next =
+      searchParams?.get('next') ||
+      (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
+    const redirect = next
+      ? `${origin}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${origin}/auth/callback`
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` }
+      options: { redirectTo: redirect }
     })
     if (error) setStatus(error.message)
   }
@@ -122,4 +139,3 @@ export default function LoginClient() {
     </div>
   )
 }
-
