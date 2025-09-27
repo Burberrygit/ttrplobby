@@ -7,6 +7,7 @@ export type Profile = {
   display_name: string | null
   avatar_url: string | null
   bio: string | null
+  time_zone?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -22,7 +23,7 @@ export async function fetchMyProfile(): Promise<Profile | null> {
   if (!user) return null
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, created_at, updated_at')
+    .select('id, username, display_name, avatar_url, bio, time_zone, created_at, updated_at')
     .eq('id', user.id)
     .maybeSingle()
   if (error) throw error
@@ -34,11 +35,13 @@ export async function saveProfile({
   display_name,
   avatar_url,
   bio,
+  time_zone,
 }: {
   username?: string
   display_name?: string
   avatar_url?: string
   bio?: string
+  time_zone?: string
 }) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) throw authErr || new Error('Not signed in')
@@ -52,6 +55,7 @@ export async function saveProfile({
         display_name: (display_name ?? username) ?? null,
         avatar_url: avatar_url ?? null,
         bio: bio ?? null,
+        time_zone: time_zone ?? null,
       },
       { onConflict: 'id' }
     )
