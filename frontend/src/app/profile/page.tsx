@@ -33,6 +33,18 @@ export default function ProfileDashboard() {
   const [games, setGames] = useState<Game[]>([])
   const [gamesLoading, setGamesLoading] = useState(true)
 
+  // Account menu
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current) return
+      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
   // Load profile + memberSince + games
   useEffect(() => {
     (async () => {
@@ -152,14 +164,37 @@ export default function ProfileDashboard() {
               )}
             </div>
 
-            {/* Edit only */}
-            <div className="mt-4 md:mt-0 flex items-center gap-2">
-              <a
-                href="/profile/edit"
-                className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40 text-white transition"
+            {/* Account dropdown (Edit profile / Sign out) */}
+            <div className="mt-4 md:mt-0 flex items-center gap-2 relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(v => !v)}
+                className="px-3 py-2 rounded-xl border border-white/20 hover:border-white/40 text-white transition"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
               >
-                Edit profile
-              </a>
+                Account ▾
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-44 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
+                  <a
+                    href="/profile/edit"
+                    className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Edit profile
+                  </a>
+                  <button
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+                    onClick={async () => {
+                      setMenuOpen(false)
+                      await supabase.auth.signOut()
+                      router.push('/')
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
