@@ -12,7 +12,6 @@ export default function CallbackClient() {
   useEffect(() => {
     (async () => {
       try {
-        // Exchange the code in the URL for a session
         const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
         if (error) {
           setStatus(error.message)
@@ -20,11 +19,11 @@ export default function CallbackClient() {
           return
         }
 
-        // Decide destination: onboarding if profile incomplete, else next/profile
         const { data: userData } = await supabase.auth.getUser()
         const uid = userData.user?.id
-        let destFromQuery = searchParams?.get('next') || undefined
-        let destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
+
+        const destFromQuery = searchParams?.get('next') || undefined
+        const destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
 
         let needsOnboarding = false
         if (uid) {
@@ -36,10 +35,7 @@ export default function CallbackClient() {
           needsOnboarding = !prof?.username
         }
 
-        const dest = needsOnboarding
-          ? '/onboarding'
-          : (destFromQuery || destFromStorage || '/profile')
-
+        const dest = needsOnboarding ? '/onboarding' : (destFromQuery || destFromStorage || '/profile')
         if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
         router.replace(dest)
       } catch (e: any) {
@@ -57,4 +53,3 @@ export default function CallbackClient() {
     </div>
   )
 }
-
