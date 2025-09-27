@@ -33,10 +33,6 @@ export default function ProfileDashboard() {
   const [games, setGames] = useState<Game[]>([])
   const [gamesLoading, setGamesLoading] = useState(true)
 
-  // --- avatar upload helpers ---
-  const avatarInputRef = useRef<HTMLInputElement | null>(null)
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
-
   // Load profile + memberSince + games
   useEffect(() => {
     (async () => {
@@ -109,37 +105,6 @@ export default function ProfileDashboard() {
     avatarUrl?.trim() ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName || username || 'Player')}&background=0B0B0E&color=FFFFFF`
 
-  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      setUploadingAvatar(true)
-      setErrorMsg(null)
-      const { data: { user }, error: authErr } = await supabase.auth.getUser()
-      if (authErr || !user) throw authErr || new Error('Not signed in')
-
-      // Upload to Storage bucket "avatars" (public)
-      const ext = file.name.split('.').pop() || 'jpg'
-      const path = `${user.id}/${crypto.randomUUID()}.${ext}`
-      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: false })
-      if (upErr) throw upErr
-
-      const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path)
-      const publicUrl = pub.publicUrl
-
-      // Persist to profile
-      const { error: profErr } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
-      if (profErr) throw profErr
-
-      setAvatarUrl(publicUrl)
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to update avatar (check Storage bucket "avatars" and RLS)')
-    } finally {
-      setUploadingAvatar(false)
-      if (avatarInputRef.current) avatarInputRef.current.value = ''
-    }
-  }
-
   if (loading) {
     return (
       <div className="min-h-[70vh] max-w-6xl mx-auto px-4 py-8 text-white">
@@ -170,21 +135,6 @@ export default function ProfileDashboard() {
               />
               {/* online dot */}
               <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 ring-2 ring-zinc-900" title="Online" />
-
-              {/* change photo overlay */}
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onPickAvatar}
-              />
-              <button
-                onClick={() => avatarInputRef.current?.click()}
-                className="absolute -bottom-2 left-1/2 -translate-x-1/2 translate-y-full px-2 py-1 rounded-md border border-white/20 bg-black/50 text-xs text-white hover:border-white/40"
-              >
-                {uploadingAvatar ? 'Uploading…' : 'Change photo'}
-              </button>
             </div>
 
             <div className="mt-6 md:mt-0 flex-1 min-w-0">
@@ -480,3 +430,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
