@@ -114,7 +114,7 @@ export default function EditProfilePage() {
       await saveProfile({
         username,
         display_name: displayName,
-        avatar_url: finalAvatarUrl || null,
+        avatar_url: finalAvatarUrl || undefined,
         bio,
         time_zone: timeZone === 'auto' ? browserTz : timeZone,
       })
