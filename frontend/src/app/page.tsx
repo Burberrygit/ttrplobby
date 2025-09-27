@@ -173,6 +173,7 @@ export default function HomePage() {
             </h1>
             <p className="col-start-2 row-start-2 mt-4 text-zinc-300 max-w-prose">
               ttrplobby lets you jump into a TTRPG in minutes or plan your next campaign. Create an account with email, Google, or Discord, build your profile, and join a lobby instantly.
+              <span className="block mt-2 text-amber-300/90 text-sm">Under construction, but still barely functional.</span>
             </p>
 
             {/* CTAs */}
@@ -361,4 +362,5 @@ function Logo() {
     console.assert(typeof Logo === 'function', 'Logo is a function')
   } catch {/* no-op */}
 })();
+
 
