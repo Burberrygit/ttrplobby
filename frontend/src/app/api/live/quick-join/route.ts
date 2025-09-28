@@ -1,40 +1,54 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+// API: POST /api/live/quick-join
+// Body may include: { system, newPlayerFriendly, adult, lengthMinutes, toleranceMinutes, widen, ignoreFlags }
+// The user must send an Authorization: Bearer <access_token> header (set by the client in /live/search).
 
-// NOTE: Adjust these table/column names to match your schema.
-const GAMES_TABLE = 'live_games';
-const PLAYERS_TABLE = 'live_game_players';
-// Columns assumed on live_games: id (uuid), system (text), new_player_friendly (bool),
-// adult (bool), length_minutes (int), status (text: 'open'|'full'|'started'),
-// max_players (int), current_players (int? optional), created_at (timestamptz)
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+// Ensure these are set in your Netlify env:
+// NEXT_PUBLIC_SUPABASE_URL
+// NEXT_PUBLIC_SUPABASE_ANON_KEY
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
+
+// Adjust to your schema
+const GAMES_TABLE = 'live_games'
+const PLAYERS_TABLE = 'live_game_players'
 
 export async function POST(req: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-
-  // Must be logged in so we can add you as a player
-  const { data: auth } = await supabase.auth.getUser();
-  const user = auth?.user;
-  if (!user) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  // Expect Authorization header with a Supabase access token
+  const authHeader = req.headers.get('authorization') || ''
+  const hasBearer = /^Bearer\s+/i.test(authHeader)
+  if (!hasBearer) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const body = await req.json().catch(() => ({}));
-  const system = (body.system ?? 'dnd5e') as string;
-  const newPlayerFriendly = Boolean(body.newPlayerFriendly);
-  const adult = Boolean(body.adult);
-  const lengthMinutes = Number(body.lengthMinutes ?? 120);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: authHeader } },
+  })
 
-  const tolerance = Number(body.toleranceMinutes ?? 0); // ±minutes
-  const widen = Boolean(body.widen ?? false);
-  const ignoreFlags = Boolean(body.ignoreFlags ?? false);
+  // Confirm user
+  const { data: userData, error: authErr } = await supabase.auth.getUser()
+  if (authErr || !userData?.user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+  const user = userData.user
 
-  const minLen = Math.max(15, lengthMinutes - tolerance);
-  const maxLen = lengthMinutes + tolerance;
+  const body = await req.json().catch(() => ({}))
+  const system = (body.system ?? 'dnd5e') as string
+  const newPlayerFriendly = Boolean(body.newPlayerFriendly)
+  const adult = Boolean(body.adult)
+  const lengthMinutes = Number(body.lengthMinutes ?? 120)
 
-  // Build base query for open games of the chosen system with space
-  // (If you track capacity differently, add your own condition here.)
+  const tolerance = Number(body.toleranceMinutes ?? 0)
+  const widen = Boolean(body.widen ?? false) // retained for compatibility; not used separately
+  const ignoreFlags = Boolean(body.ignoreFlags ?? false)
+
+  const minLen = Math.max(15, lengthMinutes - tolerance)
+  const maxLen = lengthMinutes + tolerance
+
+  // Base query
   let query = supabase
     .from(GAMES_TABLE)
     .select('id, system, new_player_friendly, adult, length_minutes, status, max_players, created_at')
@@ -43,43 +57,37 @@ export async function POST(req: Request) {
     .gte('length_minutes', minLen)
     .lte('length_minutes', maxLen)
     .order('created_at', { ascending: true })
-    .limit(1);
+    .limit(1)
 
   if (!ignoreFlags) {
-    query = query.eq('new_player_friendly', newPlayerFriendly).eq('adult', adult);
+    query = query.eq('new_player_friendly', newPlayerFriendly).eq('adult', adult)
   }
 
-  // If not widening, keep strict match (no changes). When widening, the above already widens by length tolerance.
-  const { data: games, error: gErr } = await query;
+  const { data: games, error: gErr } = await query
   if (gErr) {
-    console.error('[quick-join] game search error', gErr);
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+    console.error('[quick-join] search error', gErr)
+    return NextResponse.json({ error: 'Search failed' }, { status: 500 })
   }
-
   if (!games || games.length === 0) {
-    return NextResponse.json({ error: 'No match' }, { status: 404 });
+    return NextResponse.json({ error: 'No match' }, { status: 404 })
   }
 
-  const game = games[0];
+  const game = games[0]
 
-  // Add current user as player (id → your profiles/users FK as needed)
-  // If your players table wants a profile_id (not auth user id), replace user.id accordingly.
-  const insertPayload = { game_id: game.id, user_id: user.id };
-
-  // Try upsert to avoid duplicate joins
+  // Join or upsert player
+  const insertPayload = { game_id: game.id, user_id: user.id }
   const { error: joinErr } = await supabase
     .from(PLAYERS_TABLE)
-    .upsert(insertPayload, { onConflict: 'game_id,user_id', ignoreDuplicates: false });
+    .upsert(insertPayload, { onConflict: 'game_id,user_id', ignoreDuplicates: false })
 
   if (joinErr) {
-    // If it's a uniqueness violation, treat as success (already joined).
-    const msg = String(joinErr.message || '').toLowerCase();
-    const isUnique = msg.includes('duplicate') || msg.includes('unique') || msg.includes('conflict');
+    const msg = String(joinErr.message || '').toLowerCase()
+    const isUnique = msg.includes('duplicate') || msg.includes('unique') || msg.includes('conflict')
     if (!isUnique) {
-      console.error('[quick-join] join error', joinErr);
-      return NextResponse.json({ error: 'Join failed' }, { status: 500 });
+      console.error('[quick-join] join error', joinErr)
+      return NextResponse.json({ error: 'Join failed' }, { status: 500 })
     }
   }
 
-  return NextResponse.json({ gameId: game.id });
+  return NextResponse.json({ gameId: game.id })
 }
