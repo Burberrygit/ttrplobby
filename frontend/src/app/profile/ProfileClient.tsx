@@ -42,13 +42,12 @@ export default function ProfileClient() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser()
-      const user = data.user
-      if (!user) {
-        router.replace('/login?next=/profile')
-        return
-      }
+    let mounted = true
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    let unsub: { subscription: { unsubscribe(): void } } | null = null
+
+    async function hydrateForUser(user: { id: string; email?: string | null; created_at?: string }) {
+      if (!mounted) return
       setEmail(user.email ?? null)
 
       const { data: prof } = await supabase
@@ -57,10 +56,12 @@ export default function ProfileClient() {
         .eq('id', user.id)
         .maybeSingle()
 
+      if (!mounted) return
       if (!prof?.username) {
         router.replace('/onboarding')
         return
       }
+
       setProfile({
         username: prof.username ?? null,
         display_name: (prof as any).display_name ?? null,
@@ -85,7 +86,39 @@ export default function ProfileClient() {
       }
 
       setLoading(false)
+    }
+
+    ;(async () => {
+      // 1) Try current session first
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted) return
+      if (session?.user) {
+        await hydrateForUser(session.user)
+        return
+      }
+
+      // 2) No session yet — wait briefly for auth to hydrate, then fall back to login
+      timeout = setTimeout(() => {
+        if (!mounted) return
+        router.replace('/login?next=/profile')
+      }, 2500)
+
+      const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+        if (s?.user && mounted) {
+          if (timeout) clearTimeout(timeout)
+          hydrateForUser(s.user)
+          // we can unsubscribe after hydration
+          data.subscription.unsubscribe()
+        }
+      })
+      unsub = data
     })()
+
+    return () => {
+      mounted = false
+      if (timeout) clearTimeout(timeout)
+      if (unsub) unsub.subscription.unsubscribe()
+    }
   }, [router])
 
   const tokenDisplay = useMemo(() => {
