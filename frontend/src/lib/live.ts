@@ -1,31 +1,29 @@
 // File: frontend/src/lib/live.ts
 import { supabase } from '@/lib/supabaseClient'
 
-export type LiveGame = {
+export type LiveRoom = {
   id: string
   host_id: string
   title: string
   system: string | null
-  status: 'live' | 'open' | 'completed' | 'cancelled' | string
-  seats: number
   vibe: string | null
   poster_url: string | null
-  time_zone: string | null
   discord_url: string | null
-  external_url: string | null
+  game_url: string | null
+  status: string
   created_at: string
-  updated_at: string
 }
 
-export async function requireUser() {
-  const { data: { user }, error } = await supabase.auth.getUser()
+async function requireUser() {
+  const { data: { session }, error } = await supabase.auth.getSession()
   if (error) throw error
+  const user = session?.user
   if (!user) throw new Error('Not signed in')
   return user
 }
 
 function slugify(name: string) {
-  return name
+  return (name || 'poster')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
@@ -35,11 +33,9 @@ function slugify(name: string) {
 export async function startLiveGame(input: {
   title: string
   system: string | null
-  seats: number
-  vibe: string | null
-  time_zone: string | null
-  discord_url: string | null
-  external_url: string | null
+  vibe?: string | null
+  discord_url?: string | null
+  external_url?: string | null
   poster_file?: File | null
 }): Promise<string> {
   const user = await requireUser()
@@ -47,51 +43,48 @@ export async function startLiveGame(input: {
   let poster_url: string | null = null
   if (input.poster_file) {
     const ext = (input.poster_file.name.split('.').pop() || 'jpg').toLowerCase()
-    const base = slugify(input.title || input.poster_file.name || 'poster')
-    // IMPORTANT for RLS: store under the user's own folder `${user.id}/...`
-    const path = `${user.id}/${Date.now()}-${base}.${ext}`
+    const base = slugify(input.title || input.poster_file.name)
+    const path = `${user.id}/${Date.now()}-${base}.${ext}` // satisfy "own folder" policy
 
-    const { error: upErr } = await supabase.storage
+    const uploaded = await supabase.storage
       .from('posters')
-      .upload(path, input.poster_file, {
-        cacheControl: '3600',
-        upsert: false, // avoid triggering UPDATE policy on first write
-        contentType: input.poster_file.type || 'image/*',
-      })
-    if (upErr) throw new Error(`Poster upload failed: ${upErr.message}`)
+      .upload(path, input.poster_file, { upsert: false, cacheControl: '3600', contentType: input.poster_file.type || 'image/*' })
 
-    const { data } = supabase.storage.from('posters').getPublicUrl(path)
-    poster_url = data.publicUrl || null
+    if (uploaded.error) {
+      console.error('STORAGE upload failed', uploaded.error, { path, userId: user.id })
+      throw new Error(`Poster upload failed: ${uploaded.error.message}`)
+    }
+
+    const { data: pub } = supabase.storage.from('posters').getPublicUrl(path)
+    poster_url = pub.publicUrl
   }
 
-  const payload = {
-    host_id: user.id,                         // RLS: must equal auth.uid()
+  const insertPayload: any = {
+    host_id: user.id,              // RLS: must equal auth.uid()
     title: input.title || 'Live Lobby',
     system: input.system,
-    status: 'live' as const,
-    seats: input.seats || 5,
-    vibe: input.vibe,
+    vibe: input.vibe ?? null,
     poster_url,
-    time_zone: input.time_zone,
-    discord_url: input.discord_url,
-    external_url: input.external_url,
+    discord_url: input.discord_url ?? null,
+    game_url: input.external_url ?? null,
+    status: 'active',              // column exists on live_rooms in your schema
   }
 
   const { data, error } = await supabase
-    .from('games')
-    .insert([payload])
+    .from('live_rooms')
+    .insert([insertPayload])
     .select('id')
     .single()
-  if (error) throw new Error(`Create game failed: ${error.message}`)
 
-  // Ensure the host is recorded as a member; ignore failure silently.
-  await supabase
-    .from('game_players')
-    .insert({ game_id: data.id, user_id: user.id, role: 'host' })
-    .then(() => {}, () => {})
+  if (error) {
+    console.error('DB insert failed', error, insertPayload)
+    throw new Error(`Create live room failed: ${error.message}`)
+  }
 
-  return data.id as string
+  return String((data as any).id)
 }
+
+// ---- Presence / chat helpers (unchanged) ----
 
 export type PresenceUser = {
   id: string
@@ -100,20 +93,15 @@ export type PresenceUser = {
   role: 'host' | 'player' | string
 }
 
-export function presenceChannel(gameId: string) {
-  // Presence channel name may be any string; keep it namespaced.
-  return supabase.channel(`presence:lobby:${gameId}`, {
+export function presenceChannel(roomId: string) {
+  return supabase.channel(`presence:lobby:${roomId}`, {
     config: { presence: { key: 'presence' } }
   })
 }
 
-export function messagesChannel(gameId: string) {
-  // Postgres changes channel for chat messages table
-  return supabase.channel(`messages:lobby:${gameId}`, {
-    config: {
-      broadcast: { self: true },
-      presence: { key: 'presence' }
-    }
+export function messagesChannel(roomId: string) {
+  return supabase.channel(`messages:lobby:${roomId}`, {
+    config: { broadcast: { self: true }, presence: { key: 'presence' } }
   })
 }
 
@@ -129,20 +117,20 @@ export async function getMyProfileLite() {
   return { id: user.id, name, avatar_url: data?.avatar_url || null }
 }
 
-export async function sendLobbyMessage(gameId: string, body: string) {
+export async function sendLobbyMessage(roomId: string, body: string) {
   const user = await requireUser()
   if (!body.trim()) return
   const { error } = await supabase
     .from('lobby_messages')
-    .insert({ game_id: gameId, user_id: user.id, body })
+    .insert({ game_id: roomId, user_id: user.id, body })
   if (error) throw error
 }
 
-export async function fetchLobbyMessages(gameId: string, limit = 100) {
+export async function fetchLobbyMessages(roomId: string, limit = 100) {
   const { data, error } = await supabase
     .from('lobby_messages')
     .select('id, user_id, body, created_at, user:profiles(id,display_name,username,avatar_url)')
-    .eq('game_id', gameId)
+    .eq('game_id', roomId)
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error) throw error
@@ -158,4 +146,5 @@ export async function fetchLobbyMessages(gameId: string, limit = 100) {
     }
   }))
 }
+
 
