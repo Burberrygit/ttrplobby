@@ -32,6 +32,11 @@ export default function EditProfilePage() {
   const [uploading, setUploading] = useState(false)
   const chosenFileRef = useRef<File | null>(null)
 
+  // delete account modal (hard delete)
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const browserTz = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -202,6 +207,35 @@ export default function EditProfilePage() {
     }
   }
 
+  // ----- HARD DELETE (Edge Function) -----
+  async function confirmHardDelete() {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const endpoint = `${process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL}/delete-account`
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Not signed in')
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (!res.ok) {
+        const message = (await res.text()) || 'Delete failed'
+        throw new Error(message)
+      }
+
+      await supabase.auth.signOut()
+      router.replace('/')
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Delete failed')
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-xl mx-auto px-4 py-10 text-white">
@@ -321,10 +355,55 @@ export default function EditProfilePage() {
           >
             Cancel
           </button>
+
+          {/* Danger zone: Hard delete */}
+          <div className="ml-auto">
+            <button
+              type="button"
+              onClick={() => { setShowDelete(true); setDeleteError(null) }}
+              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 font-semibold"
+            >
+              Delete profile
+            </button>
+          </div>
         </div>
       </form>
+
+      {/* Delete confirm modal */}
+      {showDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => !deleting && setShowDelete(false)} />
+          <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-900 p-6 mx-4">
+            <h2 className="text-xl font-bold text-white">Delete your profile?</h2>
+            <p className="text-white/80 mt-2">
+              This action is <span className="text-red-400 font-semibold">permanent</span>. It will:
+            </p>
+            <ul className="mt-2 text-white/75 list-disc pl-5 space-y-1 text-sm">
+              <li>End any live lobbies you are hosting.</li>
+              <li>Delete your profile and public files (avatars/posters in your folders).</li>
+              <li>Delete your account from authentication and sign you out.</li>
+            </ul>
+            {deleteError && <div className="mt-3 text-sm text-red-400">{deleteError}</div>}
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                disabled={deleting}
+                onClick={() => setShowDelete(false)}
+                className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={confirmHardDelete}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 font-semibold"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
 
