@@ -123,24 +123,24 @@ export default function NewSchedulePage() {
       <PageShell className="flex-1">
         {/* Wrapper positions the buttons OUTSIDE the card but visually over the corners */}
         <div className="relative w-full max-w-[1200px] mx-auto">
-          {/* Corner buttons (outside the card, overlapping its top corners) */}
+          {/* Corner buttons (outside the card, just above its top corners) */}
           <a
             href="/"
             aria-label="Go to ttrplobby"
-            className="absolute -top-5 left-5 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
+            className="absolute -top-10 left-3 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
           >
             <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
           <a
             href="/profile"
             aria-label="Go to profile"
-            className="absolute -top-5 right-5 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
+            className="absolute -top-10 right-3 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
           >
             Profile
           </a>
 
-          {/* Wide, centered card (no clipping of the outside buttons) */}
-          <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+          {/* Add top margin so the card sits below the floating buttons */}
+          <div className="mt-8 overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
             <h1 className="text-2xl font-bold">Post a new game</h1>
             <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
@@ -321,3 +321,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
