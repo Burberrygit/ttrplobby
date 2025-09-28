@@ -139,9 +139,9 @@ export default function NewSchedulePage() {
             Profile
           </a>
 
-          {/* Wide, centered card */}
-          <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
-            <h1 className="text-2xl font-bold pt-14">Post a new game</h1>
+          {/* Wide, centered card lowered so buttons sit outside its top edge */}
+          <div className="mt-14 overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+            <h1 className="text-2xl font-bold">Post a new game</h1>
             <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
             <form onSubmit={onSubmit} className="grid md:grid-cols-2 gap-6 mt-6">
@@ -321,4 +321,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
