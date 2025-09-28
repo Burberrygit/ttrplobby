@@ -139,8 +139,8 @@ export default function NewSchedulePage() {
             Profile
           </a>
 
-          {/* Add top margin so the card sits below the floating buttons */}
-          <div className="mt-8 overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+          {/* Add more top margin so the card sits further below the floating buttons */}
+          <div className="mt-12 overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
             <h1 className="text-2xl font-bold">Post a new game</h1>
             <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
