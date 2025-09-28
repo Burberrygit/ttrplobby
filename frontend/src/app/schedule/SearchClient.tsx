@@ -204,87 +204,103 @@ export default function SearchClient() {
   const effectiveTz = tz === 'Any' || tz === 'local' ? MY_TZ : tz
 
   return (
-    <>
-      <h1 className="text-2xl font-bold text-white">Search games</h1>
-      <p className="text-white/70 mt-1">Find a table by title, system, vibe, time zone, or availability.</p>
+    <div className="min-h-screen flex flex-col text-white">
+      <main className="flex-1">
+        <div className="max-w-6xl mx-auto w-full px-4 py-8">
+          <h1 className="text-2xl font-bold text-white">Search games</h1>
+          <p className="text-white/70 mt-1">Find a table by title, system, vibe, time zone, or availability.</p>
 
-      {/* Search + Filters Bar (no dropdowns; everything inline) */}
-      <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
-        <div className="grid gap-3">
-          {/* Row 1: query + core selects */}
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div className="flex-1">
-              <label className="sr-only">Search</label>
-              <div className="flex items-center gap-2 rounded-xl bg-zinc-950 border border-white/10 px-3 py-2">
-                <SearchIcon />
-                <input
-                  value={q}
-                  onChange={(e) => setQDebounced(e.target.value)}
-                  placeholder="Search titles, systems, vibes…"
-                  className="bg-transparent outline-none text-white placeholder:text-white/40 flex-1"
+          {/* Search + Filters Bar (no dropdowns; everything inline) */}
+          <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
+            <div className="grid gap-3">
+              {/* Row 1: query + core selects */}
+              <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                <div className="flex-1">
+                  <label className="sr-only">Search</label>
+                  <div className="flex items-center gap-2 rounded-xl bg-zinc-950 border border-white/10 px-3 py-2">
+                    <SearchIcon />
+                    <input
+                      value={q}
+                      onChange={(e) => setQDebounced(e.target.value)}
+                      placeholder="Search titles, systems, vibes…"
+                      className="bg-transparent outline-none text-white placeholder:text-white/40 flex-1"
+                    />
+                    {q && (
+                      <button className="text-white/60 hover:text-white" onClick={() => { setQ(''); updateUrl(); void load() }}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <Select value={system} onChange={setSystem} label="System" options={SYSTEMS as unknown as string[]} />
+                <Select value={sortBy} onChange={setSortBy} label="Sort" options={SORTS as unknown as string[]} />
+                <Select
+                  value={tz}
+                  onChange={setTz}
+                  label="Time zone"
+                  options={['Any', 'local', ...COMMON_TZS] as unknown as string[]}
+                  labels={{ local: tzLabelLocal }}
                 />
-                {q && (
-                  <button className="text-white/60 hover:text-white" onClick={() => { setQ(''); updateUrl(); void load() }}>
-                    Clear
-                  </button>
-                )}
+              </div>
+
+              {/* Row 2: inline toggles (formerly in Filters dropdown) */}
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" className="accent-brand" checked={onlySeats} onChange={e => setOnlySeats(e.target.checked)} />
+                  <span>Only show games with open seats</span>
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e => setWelcomesNew(e.target.checked)} />
+                  <span>Welcomes new players</span>
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" className="accent-brand" checked={mature} onChange={e => setMature(e.target.checked)} />
+                  <span>18+ content</span>
+                </label>
+
+                <button onClick={resetFilters} className="ml-auto px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                  Reset all
+                </button>
               </div>
             </div>
-
-            <Select value={system} onChange={setSystem} label="System" options={SYSTEMS as unknown as string[]} />
-            <Select value={sortBy} onChange={setSortBy} label="Sort" options={SORTS as unknown as string[]} />
-            <Select
-              value={tz}
-              onChange={setTz}
-              label="Time zone"
-              options={['Any', 'local', ...COMMON_TZS] as unknown as string[]}
-              labels={{ local: tzLabelLocal }}
-            />
           </div>
 
-          {/* Row 2: inline toggles (formerly in Filters dropdown) */}
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <label className="inline-flex items-center gap-2">
-              <input type="checkbox" className="accent-brand" checked={onlySeats} onChange={e => setOnlySeats(e.target.checked)} />
-              <span>Only show games with open seats</span>
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e => setWelcomesNew(e.target.checked)} />
-              <span>Welcomes new players</span>
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input type="checkbox" className="accent-brand" checked={mature} onChange={e => setMature(e.target.checked)} />
-              <span>18+ content</span>
-            </label>
+          {/* Results */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between">
+              <div className="text-white/70 text-sm">{loading ? 'Loading…' : `${games.length} result${games.length === 1 ? '' : 's'}`}</div>
+            </div>
 
-            <button onClick={resetFilters} className="ml-auto px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
-              Reset all
-            </button>
+            {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
+
+            {loading ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                {[...Array(6)].map((_, i) => <div key={i} className="h-52 rounded-2xl border border-white/10 bg-white/5 animate-pulse" />)}
+              </div>
+            ) : games.length === 0 ? (
+              <div className="text-white/70 text-sm mt-3">No games match your filters.</div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                {games.map((g) => <GameCard key={g.id} g={g} tz={effectiveTz} />)}
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Results */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between">
-          <div className="text-white/70 text-sm">{loading ? 'Loading…' : `${games.length} result${games.length === 1 ? '' : 's'}`}</div>
+      {/* Pinned footer */}
+      <footer className="border-t border-white/10 px-4">
+        <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
         </div>
-
-        {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
-
-        {loading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            {[...Array(6)].map((_, i) => <div key={i} className="h-52 rounded-2xl border border-white/10 bg-white/5 animate-pulse" />)}
-          </div>
-        ) : games.length === 0 ? (
-          <div className="text-white/70 text-sm mt-3">No games match your filters.</div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            {games.map((g) => <GameCard key={g.id} g={g} tz={effectiveTz} />)}
-          </div>
-        )}
-      </div>
-    </>
+      </footer>
+    </div>
   )
 }
 
@@ -383,4 +399,3 @@ function fmtDateInTz(iso: string, tz: string): string {
     return d.toLocaleString()
   }
 }
-
