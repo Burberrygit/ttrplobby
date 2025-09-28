@@ -85,16 +85,16 @@ export default function Client() {
 
   return (
     <div className="relative min-h-screen flex flex-col text-white">
-      {/* Halfway-from-center buttons */}
+      {/* Halfway-from-center buttons, moved to top */}
       <a
         href="/"
-        className="absolute left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
+        className="absolute left-1/4 top-6 -translate-x-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
       >
         ttrplobby
       </a>
       <a
         href="/profile"
-        className="absolute left-3/4 top-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
+        className="absolute left-3/4 top-6 -translate-x-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
       >
         Profile
       </a>
@@ -148,3 +148,4 @@ export default function Client() {
     </div>
   );
 }
+
