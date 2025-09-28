@@ -1,8 +1,14 @@
-// File: frontend/src/app/signup/SignupClient.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+
+function getSiteUrl() {
+  const fromEnv = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
+  if (fromEnv && typeof fromEnv === 'string') return fromEnv
+  if (typeof window !== 'undefined') return window.location.origin
+  return ''
+}
 
 export default function SignupClient() {
   const [email, setEmail] = useState('')
@@ -35,18 +41,40 @@ export default function SignupClient() {
 
   async function handleEmailSignup(e: React.FormEvent) {
     e.preventDefault()
+    const base = getSiteUrl()
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
+      sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
+    }
+    const next =
+      searchParams?.get('next') ||
+      (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
+    const redirect = next
+      ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${base}/auth/callback`
+
     // Magic link also creates the account
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
+      options: { emailRedirectTo: redirect }
     })
     setStatus(error ? error.message : 'Check your inbox to finish creating your account.')
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
+    const base = getSiteUrl()
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
+      sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
+    }
+    const next =
+      searchParams?.get('next') ||
+      (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
+    const redirect = next
+      ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${base}/auth/callback`
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` }
+      options: { redirectTo: redirect }
     })
     if (error) setStatus(error.message)
   }
@@ -121,4 +149,5 @@ export default function SignupClient() {
     </div>
   )
 }
+
 
