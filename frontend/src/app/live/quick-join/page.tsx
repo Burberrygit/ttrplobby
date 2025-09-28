@@ -15,15 +15,16 @@ export default function QuickJoinPage() {
   const [system, setSystem] = useState('D&D 5e (2014)');
   const [newbie, setNewbie] = useState(true);
   const [adult, setAdult] = useState(false);
-  const [lengthMin, setLengthMin] = useState(120);
+  const [lengthHours, setLengthHours] = useState<number>(2); // hours instead of minutes
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const minutes = Math.max(30, Math.round(Number(lengthHours) * 60)); // convert hours → minutes for search API
     const params = new URLSearchParams({
       system,
       npf: String(newbie),
       adult: String(adult),
-      length: String(lengthMin),
+      length: String(minutes),
     });
     router.push(`/live/search?${params.toString()}`);
   }
@@ -42,16 +43,10 @@ export default function QuickJoinPage() {
           </div>
           <div className="flex gap-2">
             <a
-              href="https://www.ttrplobby.com"
-              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
-            >
-              ← ttrplobby.com
-            </a>
-            <a
               href="/profile"
               className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
             >
-              ← Profile
+              Profile
             </a>
           </div>
         </div>
@@ -86,13 +81,13 @@ export default function QuickJoinPage() {
               </label>
 
               <label className="text-sm">
-                <div className="mb-1 text-white/70">Length (minutes)</div>
+                <div className="mb-1 text-white/70">Length (hours)</div>
                 <input
                   type="number"
-                  min={30}
-                  step={15}
-                  value={lengthMin}
-                  onChange={(e) => setLengthMin(Math.max(15, Number(e.target.value || 0)))}
+                  min={0.5}
+                  step={0.5}
+                  value={lengthHours}
+                  onChange={(e) => setLengthHours(Math.max(0.5, Number(e.target.value || 0)))}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
                 />
               </label>
@@ -119,16 +114,13 @@ export default function QuickJoinPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-3">
+            <div className="mt-4 flex justify-end">
               <button
                 type="submit"
                 className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium"
               >
                 Join now
               </button>
-              <a href="/live/new" className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40">
-                Start a live game
-              </a>
             </div>
           </form>
         </div>
@@ -171,4 +163,5 @@ function LogoIcon() {
     </svg>
   );
 }
+
 
