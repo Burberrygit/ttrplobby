@@ -48,7 +48,6 @@ export default function NewLiveLobby() {
     })()
   }, [router])
 
-  // Revoke object URLs when preview changes/unmounts to avoid leaks
   useEffect(() => {
     return () => {
       if (posterPreview) URL.revokeObjectURL(posterPreview)
@@ -159,7 +158,7 @@ export default function NewLiveLobby() {
           </Field>
 
           <div className="md:col-span-2 flex items-center gap-2">
-            <button disabled={saving} className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60">
+            <button disabled={saving} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60">
               {saving ? 'Starting…' : 'Start lobby'}
             </button>
             <a href="/profile" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
@@ -170,7 +169,10 @@ export default function NewLiveLobby() {
   )
 }
 
-function Shell({ children }: { children: React.ReactNode }) { return <div className="max-w-4xl mx-auto px-4 py-8 text-white">{children}</div> }
+function Shell({ children }: { children: React.ReactNode }) {
+  return <div className="max-w-4xl mx-auto px-4 py-8 text-white">{children}</div>
+}
+
 function TopBanner() {
   return (
     <div className="mb-4">
@@ -180,9 +182,11 @@ function TopBanner() {
     </div>
   )
 }
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="grid gap-1 text-sm"><span className="text-white/70">{label}</span>{children}</label>
 }
+
 function LogoIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -191,5 +195,4 @@ function LogoIcon() {
     </svg>
   )
 }
-``` :contentReference[oaicite:0]{index=0}
 
