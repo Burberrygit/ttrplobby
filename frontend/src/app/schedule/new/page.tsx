@@ -261,7 +261,7 @@ export default function NewSchedulePage() {
 
       {/* Pinned footer */}
       <footer className="border-t border-white/10 px-4">
-        <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© 2025 ttrplobby</div>
           <nav className="flex items-center gap-4">
             <a href="/terms" className="hover:text-white">Terms</a>
@@ -277,21 +277,21 @@ export default function NewSchedulePage() {
 /* ------------------------------ layout helpers ----------------------------- */
 
 function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`max-w-6xl mx-auto px-4 py-8 ${className}`}>{children}</div>
+  return <div className={`max-w-7xl mx-auto px-6 py-8 ${className}`}>{children}</div>
 }
 
 function HeaderBar() {
   return (
-    <div className="mb-4 flex items-center justify-between">
+    <div className="mb-6 flex items-center justify-between gap-6 w-full">
       <a
         href="/profile"
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
       >
         Profile
       </a>
       <a
         href="/"
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
       >
         <LogoIcon /><span className="font-semibold">ttrplobby</span>
       </a>
