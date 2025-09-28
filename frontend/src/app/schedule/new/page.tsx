@@ -113,7 +113,6 @@ export default function NewSchedulePage() {
   if (!authChecked) {
     return (
       <PageShell>
-        <HeaderBar />
         <div className="text-white/70">Checking sign-in…</div>
       </PageShell>
     )
@@ -122,11 +121,23 @@ export default function NewSchedulePage() {
   return (
     <div className="min-h-screen flex flex-col text-white">
       <PageShell className="flex-1">
-        <HeaderBar />
+        {/* Wide, centered card with overlay buttons */}
+        <div className="relative w-full max-w-[1200px] mx-auto overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+          {/* Overlay buttons pinned to card corners */}
+          <a
+            href="/"
+            className="absolute top-3 left-3 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
+          >
+            <LogoIcon /><span className="font-semibold">ttrplobby</span>
+          </a>
+          <a
+            href="/profile"
+            className="absolute top-3 right-3 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
+          >
+            Profile
+          </a>
 
-        {/* Wide, centered card */}
-        <div className="w-full max-w-[1200px] mx-auto overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
-          <h1 className="text-2xl font-bold">Post a new game</h1>
+          <h1 className="text-2xl font-bold pt-14">Post a new game</h1>
           <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
           <form onSubmit={onSubmit} className="grid md:grid-cols-2 gap-6 mt-6">
@@ -280,27 +291,6 @@ export default function NewSchedulePage() {
 function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   // Full-bleed shell; let inner card control its own max width
   return <div className={`w-full px-8 py-10 ${className}`}>{children}</div>
-}
-
-function HeaderBar() {
-  return (
-    <div className="mb-6 flex items-center justify-between gap-8 w-full">
-      {/* ttrplobby on the left */}
-      <a
-        href="/"
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
-      >
-        <LogoIcon /><span className="font-semibold">ttrplobby</span>
-      </a>
-      {/* Profile on the right */}
-      <a
-        href="/profile"
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
-      >
-        Profile
-      </a>
-    </div>
-  )
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
