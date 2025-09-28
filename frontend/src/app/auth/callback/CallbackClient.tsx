@@ -16,10 +16,13 @@ export default function CallbackClient() {
         const url = new URL(href)
         const code = url.searchParams.get('code')
 
-        const destFromQuery = url.searchParams.get('next') || undefined
-        const destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
-        const intended = destFromQuery || destFromStorage || '/profile'
+        // Compute intended destination early
+        const nextFromQuery = url.searchParams.get('next') || undefined
+        const nextFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
+        const fallback = '/profile'
+        const intended = nextFromQuery || nextFromStorage || fallback
 
+        // If no ?code=, either already signed in (refresh) or hit the route directly.
         if (!code) {
           const { data: { session } } = await supabase.auth.getSession()
           if (session?.user) {
@@ -31,6 +34,7 @@ export default function CallbackClient() {
           return
         }
 
+        // Real callback: exchange once
         const { error } = await supabase.auth.exchangeCodeForSession(href)
         if (error) {
           setStatus(error.message)
@@ -38,10 +42,10 @@ export default function CallbackClient() {
           return
         }
 
+        // Optional: onboarding gate
         const { data: userData } = await supabase.auth.getUser()
         const uid = userData.user?.id
 
-        // Optional: check onboarding
         let destination = intended
         if (uid) {
           const { data: prof } = await supabase
@@ -69,5 +73,4 @@ export default function CallbackClient() {
     </div>
   )
 }
-
 
