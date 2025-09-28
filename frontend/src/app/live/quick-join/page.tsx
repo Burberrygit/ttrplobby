@@ -1,18 +1,18 @@
+// File: frontend/src/app/live/quick-join/page.tsx
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 const SYSTEMS = [
-  { value: 'dnd5e', label: 'D&D 5e' },
-  { value: 'pf2e', label: 'Pathfinder 2e' },
-  { value: 'pf1', label: 'Pathfinder 1e' },
-  { value: 'generic', label: 'Generic TTRPG' },
+  'D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder',
+  'Shadowrun','Dungeon World','OSR','Savage Worlds','GURPS','Cyberpunk RED','Alien RPG',
+  'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
 ];
 
 export default function QuickJoinPage() {
   const router = useRouter();
-  const [system, setSystem] = useState('dnd5e');
+  const [system, setSystem] = useState('D&D 5e (2014)');
   const [newbie, setNewbie] = useState(true);
   const [adult, setAdult] = useState(false);
   const [lengthMin, setLengthMin] = useState(120);
@@ -29,68 +29,146 @@ export default function QuickJoinPage() {
   }
 
   return (
-    <main className="min-h-[70vh] flex items-center justify-center p-6">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-xl rounded-2xl shadow-lg border p-6 grid gap-5"
-      >
-        <h1 className="text-2xl font-semibold">Quick Join a Live Game</h1>
-        <p className="text-sm opacity-80">
-          Pick your preferences and we’ll drop you into the first open table that matches.
-        </p>
+    <div className="min-h-screen flex flex-col text-white">
+      <main className="max-w-4xl mx-auto w-full px-4 py-8 flex-1">
+        <TopBanner />
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Game system</span>
-          <select
-            value={system}
-            onChange={(e) => setSystem(e.target.value)}
-            className="border rounded-lg px-3 py-2"
-          >
-            {SYSTEMS.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-        </label>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={newbie}
-              onChange={(e) => setNewbie(e.target.checked)}
-            />
-            <span className="text-sm">New-player friendly</span>
-          </label>
-
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={adult}
-              onChange={(e) => setAdult(e.target.checked)}
-            />
-            <span className="text-sm">18+ content</span>
-          </label>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">Quick join a live game</h1>
+            <p className="text-white/70 mt-1">
+              Pick your preferences and we’ll drop you into the first open table that matches.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <a
+              href="https://www.ttrplobby.com"
+              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
+            >
+              ← ttrplobby.com
+            </a>
+            <a
+              href="/profile"
+              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
+            >
+              ← Profile
+            </a>
+          </div>
         </div>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Length (minutes)</span>
-          <input
-            type="number"
-            min={30}
-            step={15}
-            value={lengthMin}
-            onChange={(e) => setLengthMin(Number(e.target.value))}
-            className="border rounded-lg px-3 py-2"
-          />
-        </label>
+        <div className="mt-6 grid md:grid-cols-[280px,1fr] gap-4">
+          {/* Sidebar info to mirror /live/new layout */}
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-sm font-medium mb-2">What we’ll match</div>
+            <ul className="text-sm text-white/70 space-y-1.5">
+              <li>• <span className="text-white/90">System</span>: exact match</li>
+              <li>• <span className="text-white/90">New-player friendly</span>: respected when possible</li>
+              <li>• <span className="text-white/90">18+ content</span>: respected when possible</li>
+              <li>• <span className="text-white/90">Length</span>: we may widen by ±15–60 min</li>
+            </ul>
+            <div className="mt-3 text-xs text-white/50">
+              If nothing matches, you can tweak filters or start a new live game.
+            </div>
+          </div>
 
-        <button
-          type="submit"
-          className="mt-2 rounded-xl px-4 py-2 bg-black text-white hover:opacity-90"
-        >
-          Join
-        </button>
-      </form>
-    </main>
+          {/* Form card styled like /live/new */}
+          <form onSubmit={onSubmit} className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="grid md:grid-cols-2 gap-3">
+              <label className="text-sm">
+                <div className="mb-1 text-white/70">System</div>
+                <select
+                  value={system}
+                  onChange={(e) => setSystem(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                >
+                  {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+
+              <label className="text-sm">
+                <div className="mb-1 text-white/70">Length (minutes)</div>
+                <input
+                  type="number"
+                  min={30}
+                  step={15}
+                  value={lengthMin}
+                  onChange={(e) => setLengthMin(Math.max(15, Number(e.target.value || 0)))}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                />
+              </label>
+
+              <div className="text-sm md:col-span-2 flex items-center gap-6 mt-1">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newbie}
+                    onChange={(e) => setNewbie(e.target.checked)}
+                    className="accent-[#29e0e3]"
+                  />
+                  New-player friendly
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={adult}
+                    onChange={(e) => setAdult(e.target.checked)}
+                    className="accent-[#29e0e3]"
+                  />
+                  18+ content
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium"
+              >
+                Join now
+              </button>
+              <a href="/live/new" className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40">
+                Start a live game
+              </a>
+            </div>
+          </form>
+        </div>
+      </main>
+
+      {/* Pinned footer */}
+      <footer className="mt-12 border-t border-white/10 px-4">
+        <div className="max-w-4xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
   );
 }
+
+function TopBanner() {
+  return (
+    <div className="mb-4">
+      <a
+        href="/"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+      >
+        <LogoIcon />
+        <span className="font-semibold">ttrplobby</span>
+      </a>
+    </div>
+  );
+}
+
+function LogoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
