@@ -1,14 +1,11 @@
+// File: frontend/src/app/signup/SignupClient.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
-function siteUrl() {
-  const v = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
-  if (v) return v
-  if (typeof window !== 'undefined') return window.location.origin
-  return ''
-}
+const CANON = 'www.ttrplobby.com'
+const BASE = `https://${CANON}`
 
 export default function SignupClient() {
   const [email, setEmail] = useState('')
@@ -26,6 +23,13 @@ export default function SignupClient() {
   }
 
   useEffect(() => {
+    // Enforce canonical host before kicking off any auth
+    if (typeof window !== 'undefined' && window.location.hostname !== CANON) {
+      const { protocol, pathname, search } = window.location
+      window.location.replace(`${protocol}//${CANON}${pathname}${search}`)
+      return
+    }
+
     const n = searchParams?.get('next')
     if (typeof window !== 'undefined' && n) sessionStorage.setItem('nextAfterLogin', n)
 
@@ -37,11 +41,10 @@ export default function SignupClient() {
       if (session?.user) redirectPostAuth()
     })
     return () => { sub.subscription.unsubscribe() }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, router])
 
   async function handleEmailSignup(e: React.FormEvent) {
     e.preventDefault()
-    const base = siteUrl()
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
       sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
@@ -49,8 +52,8 @@ export default function SignupClient() {
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
     const redirect = next
-      ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${base}/auth/callback`
+      ? `${BASE}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${BASE}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -60,7 +63,6 @@ export default function SignupClient() {
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
-    const base = siteUrl()
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
       sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
@@ -68,8 +70,8 @@ export default function SignupClient() {
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
     const redirect = next
-      ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${base}/auth/callback`
+      ? `${BASE}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${BASE}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -146,6 +148,3 @@ export default function SignupClient() {
     </div>
   )
 }
-
-
-
