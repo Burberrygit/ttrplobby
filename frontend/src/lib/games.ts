@@ -12,6 +12,7 @@ export type Game = {
   seats: number
   length_min: number | null
   vibe: string | null
+  description: string | null           // <-- added
   welcomes_new: boolean
   is_mature: boolean
   created_at: string
@@ -38,6 +39,7 @@ export async function createGame(input: Partial<Game>): Promise<string> {
     seats: input.seats ?? 5,
     length_min: input.length_min ?? null,
     vibe: input.vibe ?? null,
+    description: input.description ?? null,   // <-- added
     welcomes_new: input.welcomes_new ?? true,
     is_mature: input.is_mature ?? false,
   }
@@ -69,6 +71,7 @@ export async function updateGame(gameId: string, patch: Partial<Game>): Promise<
       seats: patch.seats as number | undefined,
       length_min: patch.length_min as number | null | undefined,
       vibe: patch.vibe ?? null,
+      description: patch.description ?? null,   // <-- added
       welcomes_new: patch.welcomes_new as boolean | undefined,
       is_mature: patch.is_mature as boolean | undefined,
     })
@@ -80,7 +83,7 @@ export async function fetchOpenGames(): Promise<Game[]> {
   await requireUserId()
   const { data, error } = await supabase
     .from('games')
-    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count)')
+    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count)') // <-- description added
     .eq('status', 'open')
     .order('scheduled_at', { ascending: true })
     .limit(100)
@@ -97,7 +100,7 @@ export async function fetchGame(id: string): Promise<Game | null> {
   await requireUserId()
   const { data, error } = await supabase
     .from('games')
-    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count)')
+    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count)') // <-- description added
     .eq('id', id)
     .maybeSingle()
   if (error) throw error
@@ -171,7 +174,7 @@ export async function fetchMyHostedGames(): Promise<Game[]> {
   const userId = await requireUserId()
   const { data, error } = await supabase
     .from('games')
-    .select('id,host_id,title,system,poster_url,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count)')
+    .select('id,host_id,title,system,poster_url,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count)') // <-- description added
     .eq('host_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -187,7 +190,7 @@ export async function fetchMyJoinedGames(): Promise<Game[]> {
   const userId = await requireUserId()
   const { data, error } = await supabase
     .from('game_players')
-    .select('game:games(id,host_id,title,system,poster_url,status,seats,length_min,vibe,welcomes_new,is_mature,created_at,updated_at, game_players(count))')
+    .select('game:games(id,host_id,title,system,poster_url,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count))') // <-- description added
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
