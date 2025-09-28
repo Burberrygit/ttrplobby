@@ -64,16 +64,16 @@ export async function updateGame(gameId: string, patch: Partial<Game>): Promise<
     .from('games')
     .update({
       title: patch.title,
-      system: patch.system ?? null,
-      poster_url: patch.poster_url ?? null,
-      scheduled_at: patch.scheduled_at ?? null,
+      system: patch.system !== undefined ? patch.system : undefined,
+      poster_url: patch.poster_url !== undefined ? patch.poster_url : undefined,
+      scheduled_at: patch.scheduled_at !== undefined ? patch.scheduled_at : undefined,
       status: patch.status as Game['status'] | undefined,
-      seats: patch.seats as number | undefined,
-      length_min: patch.length_min as number | null | undefined,
-      vibe: patch.vibe ?? null,
-      description: patch.description ?? null,   // <-- added
-      welcomes_new: patch.welcomes_new as boolean | undefined,
-      is_mature: patch.is_mature as boolean | undefined,
+      seats: patch.seats !== undefined ? patch.seats : undefined,
+      length_min: patch.length_min !== undefined ? patch.length_min : undefined,
+      vibe: patch.vibe !== undefined ? patch.vibe : undefined,
+      description: patch.description !== undefined ? patch.description : undefined,   // <-- added
+      welcomes_new: patch.welcomes_new !== undefined ? patch.welcomes_new : undefined,
+      is_mature: patch.is_mature !== undefined ? patch.is_mature : undefined,
     })
     .eq('id', gameId)
   if (error) throw error
