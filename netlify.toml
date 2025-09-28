@@ -6,7 +6,7 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Canonicalize host: force apex -> www (preserve path/query)
+# Canonicalize host: redirect apex -> www (preserve path/query)
 [[redirects]]
   from = "/*"
   to = "https://www.ttrplobby.com/:splat"
