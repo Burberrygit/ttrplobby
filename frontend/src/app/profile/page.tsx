@@ -47,69 +47,99 @@ export default function ProfileDashboard() {
 
   // Load profile + memberSince + games
   useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.replace(`/login?next=${encodeURIComponent('/profile')}`)
-          return
-        }
-        // memberSince from auth.users
-        if (user.created_at) {
-          const d = new Date(user.created_at)
-          setMemberSince(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }))
-        }
+    let mounted = true
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    let unsub: { subscription: { unsubscribe(): void } } | null = null
 
-        // profile fields
-        const p = await fetchMyProfile()
-        if (p) {
-          setDisplayName(p.display_name ?? '')
-          setUsername(p.username ?? '')
-          setBio(p.bio ?? '')
-          setAvatarUrl(p.avatar_url ?? '')
-        }
-
-        // load games (hosted + joined)
-        setGamesLoading(true)
-        const created = await supabase
-          .from('games')
-          .select('id,title,system,poster_url,scheduled_at,status,host_id')
-          .eq('host_id', user.id)
-          .order('scheduled_at', { ascending: true })
-          .limit(24)
-
-        const joined = await supabase
-          .from('game_players')
-          .select('game:games(id,title,system,poster_url,scheduled_at,status,host_id)')
-          .eq('user_id', user.id)
-          .order('game(scheduled_at)', { ascending: true })
-          .limit(24)
-
-        if (created.error) throw created.error
-        if (joined.error) throw joined.error
-
-        const createdGames: Game[] = (created.data ?? []).map(g => ({
-          ...g,
-          isOwner: true,
-        }))
-
-        const joinedGames: Game[] = (joined.data ?? [])
-          .map((row: any) => row.game)
-          .filter(Boolean)
-          .filter((g: any) => g.host_id !== user.id) // avoid dupes when you’re both host and member
-          .map((g: any) => ({ ...g, isOwner: false }))
-
-        const all = [...createdGames, ...joinedGames]
-        setGames(all)
-        setHostedCount(createdGames.length)
-        setJoinedCount(joinedGames.length)
-      } catch (e: any) {
-        setErrorMsg(e?.message || 'Failed to load profile')
-      } finally {
-        setLoading(false)
-        setGamesLoading(false)
+    async function hydrateForUser(user: { id: string; created_at?: string }) {
+      if (!mounted) return
+      // memberSince from auth.users
+      if (user.created_at) {
+        const d = new Date(user.created_at)
+        setMemberSince(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }))
       }
+
+      // profile fields
+      const p = await fetchMyProfile()
+      if (!mounted) return
+      if (p) {
+        setDisplayName(p.display_name ?? '')
+        setUsername(p.username ?? '')
+        setBio(p.bio ?? '')
+        setAvatarUrl(p.avatar_url ?? '')
+      }
+
+      // load games (hosted + joined)
+      setGamesLoading(true)
+
+      const created = await supabase
+        .from('games')
+        .select('id,title,system,poster_url,scheduled_at,status,host_id')
+        .eq('host_id', user.id)
+        .order('scheduled_at', { ascending: true })
+        .limit(24)
+
+      const joined = await supabase
+        .from('game_players')
+        .select('game:games(id,title,system,poster_url,scheduled_at,status,host_id)')
+        .eq('user_id', user.id)
+        .order('game(scheduled_at)', { ascending: true })
+        .limit(24)
+
+      if (!mounted) return
+      if (created.error) { setErrorMsg(created.error.message); setLoading(false); setGamesLoading(false); return }
+      if (joined.error)  { setErrorMsg(joined.error.message);  setLoading(false); setGamesLoading(false); return }
+
+      const createdGames: Game[] = (created.data ?? []).map(g => ({
+        ...g,
+        isOwner: true,
+      }))
+
+      const joinedGames: Game[] = (joined.data ?? [])
+        .map((row: any) => row.game)
+        .filter(Boolean)
+        .filter((g: any) => g.host_id !== user.id) // avoid dupes when you’re both host and member
+        .map((g: any) => ({ ...g, isOwner: false }))
+
+      const all = [...createdGames, ...joinedGames]
+      setGames(all)
+      setHostedCount(createdGames.length)
+      setJoinedCount(joinedGames.length)
+
+      setLoading(false)
+      setGamesLoading(false)
+    }
+
+    ;(async () => {
+      // 1) Try current session first
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted) return
+      if (session?.user) {
+        await hydrateForUser(session.user)
+        return
+      }
+
+      // 2) No session yet — wait briefly for auth to hydrate, then fall back to login
+      timeout = setTimeout(() => {
+        if (!mounted) return
+        router.replace(`/login?next=${encodeURIComponent('/profile')}`)
+      }, 2500)
+
+      const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+        if (s?.user && mounted) {
+          if (timeout) clearTimeout(timeout)
+          hydrateForUser(s.user)
+          data.subscription.unsubscribe()
+        }
+      })
+      unsub = data
     })()
+
+    return () => {
+      mounted = false
+      if (timeout) clearTimeout(timeout)
+      if (unsub) unsub.subscription.unsubscribe()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -465,4 +495,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
