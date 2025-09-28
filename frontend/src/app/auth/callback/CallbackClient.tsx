@@ -22,6 +22,11 @@ export default function CallbackClient() {
         const { data: userData } = await supabase.auth.getUser()
         const uid = userData.user?.id
 
+        // Defensive: ensure a profiles row exists for first-time users
+        if (uid) {
+          await supabase.from('profiles').upsert({ id: uid })
+        }
+
         const destFromQuery = searchParams?.get('next') || undefined
         const destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
 
