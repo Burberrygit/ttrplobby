@@ -243,6 +243,27 @@ export default function LiveRoomPage() {
     router.push('/profile')
   }
 
+  // NEW: send chat message
+  function send() {
+    const msgText = text.trim()
+    if (!msgText) return
+    const ch = channelRef.current
+    if (!ch) return
+    const msg: ChatMsg = {
+      id: crypto.randomUUID(),
+      userId: me.id,
+      name: me.name,
+      avatar: me.avatar,
+      text: msgText,
+      ts: Date.now()
+    }
+    // optimistic local append
+    setChat(prev => [...prev, msg].slice(-200))
+    setText('')
+    // fire onto the channel
+    ch.send({ type: 'broadcast', event: 'chat', payload: msg })
+  }
+
   // Best-effort automatic cleanup when the HOST leaves the page/tab
   useEffect(() => {
     if (!isHost || !isUuid(roomId)) return
@@ -350,7 +371,7 @@ export default function LiveRoomPage() {
             {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
           </div>
           <div className="text-white/60 text-sm mt-2">
-            Seats: {room?.seats ?? '—'} • In lobby: {peers.length} • Open seats: {remainSeats}
+            Seats: {room?.seats ?? '—'} • In lobby: {peers.length} • Open seats: {Math.max(0, (room?.seats ?? 0) - peers.length)}
           </div>
           {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
         </div>
