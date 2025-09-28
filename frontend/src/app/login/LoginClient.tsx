@@ -1,12 +1,15 @@
-// File: frontend/src/app/login/LoginClient.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
-const SITE =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (typeof window !== 'undefined' ? window.location.origin : '')
+function getSiteUrl() {
+  // Use the canonical host from env (Netlify), fall back to current origin in the browser.
+  const fromEnv = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
+  if (fromEnv && typeof fromEnv === 'string') return fromEnv
+  if (typeof window !== 'undefined') return window.location.origin
+  return ''
+}
 
 export default function LoginClient() {
   const [email, setEmail] = useState('')
@@ -39,19 +42,18 @@ export default function LoginClient() {
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault()
-
-    // Remember intended destination (URL ?next or current path)
-    if (typeof window !== 'undefined') {
-      const n = searchParams?.get('next') || (window.location.pathname + window.location.search)
-      sessionStorage.setItem('nextAfterLogin', n)
+    const base = getSiteUrl()
+    // remember where the user was trying to go (if not already set)
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
+      sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
-
     const next =
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
+    // Always carry `next` into the callback URL so the callback page can honor it.
     const redirect = next
-      ? `${SITE}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${SITE}/auth/callback`
+      ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${base}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -61,18 +63,17 @@ export default function LoginClient() {
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
-    // Remember intended destination (URL ?next or current path)
-    if (typeof window !== 'undefined') {
-      const n = searchParams?.get('next') || (window.location.pathname + window.location.search)
-      sessionStorage.setItem('nextAfterLogin', n)
+    const base = getSiteUrl()
+    // remember where the user was trying to go (if not already set)
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
+      sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
-
     const next =
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
     const redirect = next
-      ? `${SITE}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${SITE}/auth/callback`
+      ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${base}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -153,3 +154,4 @@ export default function LoginClient() {
     </div>
   )
 }
+
