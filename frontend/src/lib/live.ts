@@ -33,6 +33,8 @@ function slugify(name: string) {
 export async function startLiveGame(input: {
   title: string
   system: string | null
+  seats?: number | null
+  time_zone?: string | null
   vibe?: string | null
   discord_url?: string | null
   external_url?: string | null
@@ -44,11 +46,15 @@ export async function startLiveGame(input: {
   if (input.poster_file) {
     const ext = (input.poster_file.name.split('.').pop() || 'jpg').toLowerCase()
     const base = slugify(input.title || input.poster_file.name)
-    const path = `${user.id}/${Date.now()}-${base}.${ext}` // satisfy "own folder" policy
+    const path = `${user.id}/${Date.now()}-${base}.${ext}` // satisfy "own folder" storage policy
 
     const uploaded = await supabase.storage
       .from('posters')
-      .upload(path, input.poster_file, { upsert: false, cacheControl: '3600', contentType: input.poster_file.type || 'image/*' })
+      .upload(path, input.poster_file, {
+        upsert: false,
+        cacheControl: '3600',
+        contentType: input.poster_file.type || 'image/*',
+      })
 
     if (uploaded.error) {
       console.error('STORAGE upload failed', uploaded.error, { path, userId: user.id })
@@ -59,16 +65,19 @@ export async function startLiveGame(input: {
     poster_url = pub.publicUrl
   }
 
-  const insertPayload: any = {
-    host_id: user.id,              // RLS: must equal auth.uid()
+  // Only include optional keys if they’re provided
+  const insertPayload: Record<string, any> = {
+    host_id: user.id,                 // RLS: must equal auth.uid()
     title: input.title || 'Live Lobby',
     system: input.system,
-    vibe: input.vibe ?? null,
+    status: 'active',                 // matches your live_rooms.status
     poster_url,
+    vibe: input.vibe ?? null,
     discord_url: input.discord_url ?? null,
     game_url: input.external_url ?? null,
-    status: 'active',              // column exists on live_rooms in your schema
   }
+  if (typeof input.seats === 'number') insertPayload.seats = input.seats
+  if (input.time_zone) insertPayload.time_zone = input.time_zone
 
   const { data, error } = await supabase
     .from('live_rooms')
@@ -84,7 +93,7 @@ export async function startLiveGame(input: {
   return String((data as any).id)
 }
 
-// ---- Presence / chat helpers (unchanged) ----
+// ---- Optional presence / chat helpers (keep if you use them) ----
 
 export type PresenceUser = {
   id: string
