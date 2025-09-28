@@ -149,159 +149,175 @@ export default function ProfileDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] max-w-6xl mx-auto px-4 py-8 text-white">
-        <TopBanner />
-        <SkeletonProfileCard />
+      <div className="min-h-screen flex flex-col text-white">
+        <main className="flex-1 max-w-6xl mx-auto px-4 py-8">
+          <TopBanner />
+          <SkeletonProfileCard />
+        </main>
+        <footer className="border-t border-white/10 px-6">
+          <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>© 2025 ttrplobby</div>
+            <nav className="flex items-center gap-4">
+              <a href="/terms" className="hover:text-white">Terms</a>
+              <a href="/privacy" className="hover:text-white">Privacy</a>
+              <a href="/contact" className="hover:text-white">Contact</a>
+            </nav>
+          </div>
+        </footer>
       </div>
     )
   }
 
   return (
-    <div className="min-h-[70vh] max-w-6xl mx-auto px-4 py-8 text-white">
-      {/* 1) Top banner → home */}
-      <TopBanner />
+    <div className="min-h-screen flex flex-col text-white">
+      <main className="flex-1 max-w-6xl mx-auto px-4 py-8">
+        {/* 1) Top banner → home */}
+        <TopBanner />
 
-      {/* Header / Profile Card */}
-      <div className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800">
-        {/* Decorative glows */}
-        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
+        {/* Header / Profile Card */}
+        <div className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800">
+          {/* Decorative glows */}
+          <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
 
-        <div className="p-6 md:p-8">
-          <div className="flex flex-col md:flex-row md:items-center md:gap-6">
-            <div className="relative shrink-0">
-              <img
-                src={imgSrc}
-                alt="Avatar"
-                className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover ring-2 ring-white/10"
-              />
-              {/* online dot */}
-              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 ring-2 ring-zinc-900" title="Online" />
+          <div className="p-6 md:p-8">
+            <div className="flex flex-col md:flex-row md:items-center md:gap-6">
+              <div className="relative shrink-0">
+                <img
+                  src={imgSrc}
+                  alt="Avatar"
+                  className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover ring-2 ring-white/10"
+                />
+                {/* online dot */}
+                <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 ring-2 ring-zinc-900" title="Online" />
+              </div>
+
+              <div className="mt-6 md:mt-0 flex-1 min-w-0">
+                <h1 className="text-2xl md:text-3xl font-extrabold leading-tight tracking-tight">
+                  {displayName || 'Unnamed Adventurer'}
+                </h1>
+                {username && <div className="text-white/70 mt-0.5">@{username}</div>}
+                {bio ? (
+                  <p className="text-white/80 mt-3 max-w-3xl">{bio}</p>
+                ) : (
+                  <p className="text-white/60 mt-3">
+                    You haven’t written a bio yet. Add one in{' '}
+                    <a className="underline underline-offset-4" href="/profile/edit">Profile settings</a>.
+                  </p>
+                )}
+              </div>
+
+              {/* Account dropdown (Edit profile / Sign out) */}
+              <div className="mt-4 md:mt-0 flex items-center gap-2 relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen(v => !v)}
+                  className="px-3 py-2 rounded-xl border border-white/20 hover:border-white/40 text-white transition"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  Account ▾
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-44 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
+                    <a
+                      href="/profile/edit"
+                      className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Edit profile
+                    </a>
+                    <button
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
+                      onClick={async () => {
+                        setMenuOpen(false)
+                        await supabase.auth.signOut()
+                        router.push('/')
+                      }}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="mt-6 md:mt-0 flex-1 min-w-0">
-              <h1 className="text-2xl md:text-3xl font-extrabold leading-tight tracking-tight">
-                {displayName || 'Unnamed Adventurer'}
-              </h1>
-              {username && <div className="text-white/70 mt-0.5">@{username}</div>}
-              {bio ? (
-                <p className="text-white/80 mt-3 max-w-3xl">{bio}</p>
-              ) : (
-                <p className="text-white/60 mt-3">
-                  You haven’t written a bio yet. Add one in{' '}
-                  <a className="underline underline-offset-4" href="/profile/edit">Profile settings</a>.
-                </p>
-              )}
+            {/* Stats */}
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard label="Games played" value={joinedCount.toString()} />
+              <StatCard label="Games hosted" value={hostedCount.toString()} />
+              <StatCard label="Reputation" value="—" />
+              <StatCard label="Member since" value={memberSince} />
             </div>
 
-            {/* Account dropdown (Edit profile / Sign out) */}
-            <div className="mt-4 md:mt-0 flex items-center gap-2 relative" ref={menuRef}>
-              <button
-                onClick={() => setMenuOpen(v => !v)}
-                className="px-3 py-2 rounded-xl border border-white/20 hover:border-white/40 text-white transition"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-              >
-                Account ▾
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-44 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
-                  <a
-                    href="/profile/edit"
-                    className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Edit profile
-                  </a>
-                  <button
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10"
-                    onClick={async () => {
-                      setMenuOpen(false)
-                      await supabase.auth.signOut()
-                      router.push('/')
-                    }}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
+            {errorMsg && <div className="mt-4 text-sm text-red-400">{errorMsg}</div>}
           </div>
-
-          {/* Stats */}
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Games played" value={joinedCount.toString()} />
-            <StatCard label="Games hosted" value={hostedCount.toString()} />
-            <StatCard label="Reputation" value="—" />
-            <StatCard label="Member since" value={memberSince} />
-          </div>
-
-          {errorMsg && <div className="mt-4 text-sm text-red-400">{errorMsg}</div>}
-        </div>
-      </div>
-
-      {/* Primary actions */}
-      <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <ActionCard href="/schedule" title="Search for games" desc="Find tables by system, vibe, time." icon={<SearchIcon />} />
-        <ActionCard href="/live/new" title="Start live game" desc="Spin up an instant lobby." icon={<PlayIcon />} />
-        <ActionCard href="/live/quick-join" title="Join live game" desc="Jump into active tables." icon={<UsersIcon />} />
-        <ActionCard href="/schedule/new" title="Post a game" desc="Schedule a session for later." icon={<PlusCircleIcon />} />
-      </div>
-
-      {/* Your games */}
-      <div className="mt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Your games</h2>
         </div>
 
-        {gamesLoading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="rounded-2xl border border-white/10 bg-white/5 h-52 animate-pulse" />
-            ))}
-          </div>
-        ) : games.length === 0 ? (
-          <div className="text-white/70 text-sm mt-3">
-            You’re not in any games yet. <a className="underline underline-offset-4" href="/schedule">Find one now</a>.
-          </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            {games.map((g) => (
-              <GameCard
-                key={g.id}
-                game={g}
-                onLeave={async (id) => {
-                  const ok = confirm('Leave this game?')
-                  if (!ok) return
-                  const { data: { user } } = await supabase.auth.getUser()
-                  if (!user) { router.push('/login'); return }
-                  const { error } = await supabase.from('game_players').delete().eq('user_id', user.id).eq('game_id', id)
-                  if (error) { alert(error.message); return }
-                  setGames(prev => prev.filter(x => x.id !== id))
-                  setJoinedCount(c => Math.max(0, c - 1))
-                }}
-                onDelete={async (id) => {
-                  const ok = confirm('Delete this game? This cannot be undone.')
-                  if (!ok) return
-                  const { error } = await supabase.from('games').delete().eq('id', id)
-                  if (error) { alert(error.message); return }
-                  setGames(prev => prev.filter(x => x.id !== id))
-                  setHostedCount(c => Math.max(0, c - 1))
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        {/* Primary actions */}
+        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <ActionCard href="/schedule" title="Search for games" desc="Find tables by system, vibe, time." icon={<SearchIcon />} />
+          <ActionCard href="/live/new" title="Start live game" desc="Spin up an instant lobby." icon={<PlayIcon />} />
+          <ActionCard href="/live/quick-join" title="Join live game" desc="Jump into active tables." icon={<UsersIcon />} />
+          <ActionCard href="/schedule/new" title="Post a game" desc="Schedule a session for later." icon={<PlusCircleIcon />} />
+        </div>
 
-      {/* Footer */}
-      <footer className="mt-12 border-t border-white/10 pt-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div>© 2025 ttrplobby</div>
-        <nav className="flex items-center gap-4">
-          <a href="/terms" className="hover:text-white">Terms</a>
-          <a href="/privacy" className="hover:text-white">Privacy</a>
-          <a href="/contact" className="hover:text-white">Contact</a>
-        </nav>
+        {/* Your games */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Your games</h2>
+          </div>
+
+          {gamesLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-white/5 h-52 animate-pulse" />
+              ))}
+            </div>
+          ) : games.length === 0 ? (
+            <div className="text-white/70 text-sm mt-3">
+              You’re not in any games yet. <a className="underline underline-offset-4" href="/schedule">Find one now</a>.
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+              {games.map((g) => (
+                <GameCard
+                  key={g.id}
+                  game={g}
+                  onLeave={async (id) => {
+                    const ok = confirm('Leave this game?')
+                    if (!ok) return
+                    const { data: { user } } = await supabase.auth.getUser()
+                    if (!user) { router.push('/login'); return }
+                    const { error } = await supabase.from('game_players').delete().eq('user_id', user.id).eq('game_id', id)
+                    if (error) { alert(error.message); return }
+                    setGames(prev => prev.filter(x => x.id !== id))
+                    setJoinedCount(c => Math.max(0, c - 1))
+                  }}
+                  onDelete={async (id) => {
+                    const ok = confirm('Delete this game? This cannot be undone.')
+                    if (!ok) return
+                    const { error } = await supabase.from('games').delete().eq('id', id)
+                    if (error) { alert(error.message); return }
+                    setGames(prev => prev.filter(x => x.id !== id))
+                    setHostedCount(c => Math.max(0, c - 1))
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Pinned footer */}
+      <footer className="border-t border-white/10 px-6">
+        <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
       </footer>
     </div>
   )
