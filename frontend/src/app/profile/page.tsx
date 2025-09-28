@@ -244,7 +244,7 @@ export default function ProfileDashboard() {
       <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ActionCard href="/schedule" title="Search for games" desc="Find tables by system, vibe, time." icon={<SearchIcon />} />
         <ActionCard href="/live/new" title="Start live game" desc="Spin up an instant lobby." icon={<PlayIcon />} />
-        <ActionCard href="/live/join" title="Join live game" desc="Jump into active tables." icon={<UsersIcon />} />
+        <ActionCard href="/live/quick-join" title="Join live game" desc="Jump into active tables." icon={<UsersIcon />} />
         <ActionCard href="/schedule/new" title="Post a game" desc="Schedule a session for later." icon={<PlusCircleIcon />} />
       </div>
 
@@ -293,6 +293,16 @@ export default function ProfileDashboard() {
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="mt-12 border-t border-white/10 pt-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div>© 2025 ttrplobby</div>
+        <nav className="flex items-center gap-4">
+          <a href="/terms" className="hover:text-white">Terms</a>
+          <a href="/privacy" className="hover:text-white">Privacy</a>
+          <a href="/contact" className="hover:text-white">Contact</a>
+        </nav>
+      </footer>
     </div>
   )
 }
