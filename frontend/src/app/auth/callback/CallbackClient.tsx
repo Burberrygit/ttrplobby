@@ -11,8 +11,8 @@ const CANON = 'www.ttrplobby.com'
 const sget = (k: string) => { try { return window.sessionStorage.getItem(k) } catch { return null } }
 const sdel = (k: string) => { try { window.sessionStorage.removeItem(k) } catch {} }
 
-// Change this to your actual onboarding route if different:
-const SETUP_ROUTE = '/profile/setup'
+// Route users who haven’t completed their profile to this page:
+const SETUP_ROUTE = '/profile/edit'
 
 export default function CallbackClient() {
   const router = useRouter()
