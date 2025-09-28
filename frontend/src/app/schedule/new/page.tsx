@@ -19,7 +19,7 @@ export default function NewSchedulePage() {
   const [vibe, setVibe] = useState('Casual one-shot')
   const [welcomesNew, setWelcomesNew] = useState(true)
   const [isMature, setIsMature] = useState(false)
-  const [description, setDescription] = useState('') // NEW: long description
+  const [description, setDescription] = useState('') // long description
 
   // image upload state
   const [posterFile, setPosterFile] = useState<File | null>(null)
@@ -188,20 +188,6 @@ export default function NewSchedulePage() {
               </select>
             </Field>
 
-            {/* NEW: Long Description (full width) */}
-            <div className="md:col-span-2">
-              <label className="grid gap-2 text-sm">
-                <span className="text-white/70">Description</span>
-                <textarea
-                  rows={10}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10 min-h-[220px]"
-                  value={description}
-                  onChange={e=>setDescription(e.target.value)}
-                  placeholder="Share a few paragraphs about your game: party level, tone, safety tools, expectations, what players should bring, etc."
-                />
-              </label>
-            </div>
-
             <Field label="Seats">
               <input
                 type="number" min={1} max={10}
@@ -244,6 +230,20 @@ export default function NewSchedulePage() {
               </label>
             </Field>
 
+            {/* Description moved here: between 18+ and the buttons */}
+            <div className="md:col-span-2">
+              <label className="grid gap-2 text-sm">
+                <span className="text-white/70">Description</span>
+                <textarea
+                  rows={10}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10 min-h-[220px]"
+                  value={description}
+                  onChange={e=>setDescription(e.target.value)}
+                  placeholder="Share a few paragraphs about your game: party level, tone, safety tools, expectations, what players should bring, etc."
+                />
+              </label>
+            </div>
+
             {errorMsg && <div className="md:col-span-2 text-sm text-red-400">{errorMsg}</div>}
 
             <div className="md:col-span-2 flex items-center gap-2">
@@ -261,7 +261,7 @@ export default function NewSchedulePage() {
 
       {/* Pinned footer */}
       <footer className="border-t border-white/10 px-4">
-        <div className="max-w-4xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© 2025 ttrplobby</div>
           <nav className="flex items-center gap-4">
             <a href="/terms" className="hover:text-white">Terms</a>
@@ -277,7 +277,7 @@ export default function NewSchedulePage() {
 /* ------------------------------ layout helpers ----------------------------- */
 
 function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`max-w-4xl mx-auto px-4 py-8 ${className}`}>{children}</div>
+  return <div className={`max-w-6xl mx-auto px-4 py-8 ${className}`}>{children}</div>
 }
 
 function HeaderBar() {
