@@ -24,6 +24,14 @@ export async function requireUser() {
   return user
 }
 
+function slugify(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 80)
+}
+
 export async function startLiveGame(input: {
   title: string
   system: string | null
@@ -39,17 +47,25 @@ export async function startLiveGame(input: {
   let poster_url: string | null = null
   if (input.poster_file) {
     const ext = (input.poster_file.name.split('.').pop() || 'jpg').toLowerCase()
-    const path = `${user.id}/${Date.now()}.${ext}`
+    const base = slugify(input.title || input.poster_file.name || 'poster')
+    // IMPORTANT for RLS: store under the user's own folder `${user.id}/...`
+    const path = `${user.id}/${Date.now()}-${base}.${ext}`
+
     const { error: upErr } = await supabase.storage
       .from('posters')
-      .upload(path, input.poster_file, { cacheControl: '3600', upsert: true, contentType: input.poster_file.type || 'image/*' })
-    if (upErr) throw upErr
+      .upload(path, input.poster_file, {
+        cacheControl: '3600',
+        upsert: false, // avoid triggering UPDATE policy on first write
+        contentType: input.poster_file.type || 'image/*',
+      })
+    if (upErr) throw new Error(`Poster upload failed: ${upErr.message}`)
+
     const { data } = supabase.storage.from('posters').getPublicUrl(path)
     poster_url = data.publicUrl || null
   }
 
   const payload = {
-    host_id: user.id,
+    host_id: user.id,                         // RLS: must equal auth.uid()
     title: input.title || 'Live Lobby',
     system: input.system,
     status: 'live' as const,
@@ -63,13 +79,16 @@ export async function startLiveGame(input: {
 
   const { data, error } = await supabase
     .from('games')
-    .insert(payload)
+    .insert([payload])
     .select('id')
     .single()
-  if (error) throw error
+  if (error) throw new Error(`Create game failed: ${error.message}`)
 
-  // ensure the host is also in members table
-  await supabase.from('game_players').insert({ game_id: data.id, user_id: user.id, role: 'host' }).then(() => {}, () => {})
+  // Ensure the host is recorded as a member; ignore failure silently.
+  await supabase
+    .from('game_players')
+    .insert({ game_id: data.id, user_id: user.id, role: 'host' })
+    .then(() => {}, () => {})
 
   return data.id as string
 }
@@ -139,3 +158,4 @@ export async function fetchLobbyMessages(gameId: string, limit = 100) {
     }
   }))
 }
+
