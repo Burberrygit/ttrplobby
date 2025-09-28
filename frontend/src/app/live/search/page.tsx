@@ -1,9 +1,13 @@
+// File: frontend/src/app/live/search/page.tsx
 'use client';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 
 export default function LiveSearchPage() {
   const router = useRouter();
@@ -14,17 +18,21 @@ export default function LiveSearchPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function callApi(body: Record<string, unknown>) {
-      // Get the current session token to authenticate the API request
+    async function getToken(): Promise<string | null> {
+      // Dynamic import avoids running the Supabase browser client during prerender
+      const { supabase } = await import('@/lib/supabaseClient');
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      return session?.access_token ?? null;
+    }
+
+    async function callApi(body: Record<string, unknown>) {
+      const token = await getToken();
       if (!token) return { ok: false, status: 401 };
 
       const res = await fetch('/api/live/quick-join', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Pass the Supabase access token for server-side user resolution
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(body),
@@ -110,4 +118,5 @@ export default function LiveSearchPage() {
     </main>
   );
 }
+
 
