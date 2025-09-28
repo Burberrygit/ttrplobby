@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 type RoomDetails = {
@@ -40,16 +40,14 @@ function normalizeExternalUrl(u?: string | null): string | null {
   return 'https://' + s.replace(/^\/*/, '')     // default to https
 }
 
+const isUuid = (s: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
-  const roomId = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      const parts = window.location.pathname.split('/')
-      return parts[parts.length - 1]
-    }
-    return ''
-  }, [])
+  const route = useParams()
+  const roomId = typeof route?.id === 'string' ? route.id : Array.isArray(route?.id) ? route?.id?.[0] ?? '' : ''
 
   const isHost = params.get('host') === '1'
 
@@ -65,6 +63,12 @@ export default function LiveRoomPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
+    // Do nothing until we have a valid UUID route param
+    if (!isUuid(roomId)) return
+
+    let unsubscribed = false
+    let chCleanup: (() => void) | null = null
+
     ;(async () => {
       // Auth + profile
       const { data: { user } } = await supabase.auth.getUser()
@@ -72,21 +76,22 @@ export default function LiveRoomPage() {
         router.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`)
         return
       }
-      // Pull profile fields if present
       const { data: prof } = await supabase
         .from('profiles')
         .select('display_name, username, avatar_url')
         .eq('id', user.id)
         .maybeSingle()
-      const name = prof?.display_name || prof?.username || 'Player'
-      setMe({ id: user.id, name, avatar: prof?.avatar_url ?? null })
+      const myName = prof?.display_name || prof?.username || 'Player'
+      setMe({ id: user.id, name: myName, avatar: prof?.avatar_url ?? null })
 
-      // Load room (if discoverable)
+      // Load the room fresh
       const { data: roomRow, error } = await supabase
         .from('live_rooms')
         .select('*')
         .eq('id', roomId)
         .maybeSingle()
+
+      if (unsubscribed) return
 
       if (error) {
         setErrorMsg(error.message)
@@ -94,7 +99,7 @@ export default function LiveRoomPage() {
         setRoom(roomRow as RoomDetails)
       }
 
-      // Join realtime channel
+      // Join realtime channel AFTER we know the valid id
       const ch = supabase.channel(`live:room:${roomId}`, {
         config: { presence: { key: user.id } }
       })
@@ -118,14 +123,13 @@ export default function LiveRoomPage() {
       await ch.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           setRtStatus('connected')
-          await ch.track({ name, avatar: prof?.avatar_url ?? null })
-          // announce join
+          await ch.track({ name: myName, avatar: prof?.avatar_url ?? null })
           const hello: ChatMsg = {
             id: crypto.randomUUID(),
             userId: 'system',
             name: 'System',
             avatar: null,
-            text: `${name} joined the lobby`,
+            text: `${myName} joined the lobby`,
             ts: Date.now()
           }
           ch.send({ type: 'broadcast', event: 'chat', payload: hello })
@@ -135,26 +139,30 @@ export default function LiveRoomPage() {
           setRtStatus('closed')
         }
       })
+
+      chCleanup = () => { ch.unsubscribe() }
     })()
 
     return () => {
+      unsubscribed = true
       if (channelRef.current) {
         channelRef.current.unsubscribe()
+        channelRef.current = null
       }
+      if (chCleanup) chCleanup()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId])
+  }, [roomId, router])
 
-  // Presence heartbeat → populate /live/players map
+  // Presence heartbeat → populate /live_presence map
   useEffect(() => {
-    if (!me.id || !roomId) return
+    if (!me.id || !isUuid(roomId)) return
     let mounted = true
     let timer: any
 
     async function pingOnce() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user || !mounted) return
+        if (!user || !mounted || !isUuid(roomId)) return
         navigator.geolocation.getCurrentPosition(async (pos) => {
           if (!mounted) return
           const lat = pos.coords.latitude
@@ -190,14 +198,13 @@ export default function LiveRoomPage() {
       text: t,
       ts: Date.now()
     }
-    // Local echo so the sender always sees their message immediately
     setChat(prev => [...prev, msg].slice(-200))
     channelRef.current.send({ type: 'broadcast', event: 'chat', payload: msg })
     setText('')
   }
 
   async function endLobby() {
-    if (!roomId) return
+    if (!isUuid(roomId)) return
     const ok = confirm('End this lobby for everyone?')
     if (!ok) return
     try {
@@ -220,9 +227,16 @@ export default function LiveRoomPage() {
     return Math.max(0, cap - used)
   }, [room?.seats, peers.length])
 
-  // Normalized external links for rendering
   const discordHref = normalizeExternalUrl(room?.discord_url)
   const gameHref = normalizeExternalUrl(room?.game_url)
+
+  if (!isUuid(roomId)) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white grid place-items-center">
+        <div className="text-white/60 text-sm">Setting up lobby…</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
