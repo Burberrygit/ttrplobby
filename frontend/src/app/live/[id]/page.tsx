@@ -187,31 +187,42 @@ export default function LiveRoomPage() {
     return () => { mounted = false; clearInterval(timer) }
   }, [me.id, roomId])
 
-  async function send() {
-    const t = text.trim()
-    if (!t || !channelRef.current) return
-    const msg: ChatMsg = {
-      id: crypto.randomUUID(),
-      userId: me.id,
-      name: me.name,
-      avatar: me.avatar,
-      text: t,
-      ts: Date.now()
-    }
-    setChat(prev => [...prev, msg].slice(-200))
-    channelRef.current.send({ type: 'broadcast', event: 'chat', payload: msg })
-    setText('')
-  }
-
   async function endLobby() {
     if (!isUuid(roomId)) return
     const ok = confirm('End this lobby for everyone?')
     if (!ok) return
     try {
-      await supabase.from('live_rooms').update({ status: 'closed' }).eq('id', roomId)
-    } catch { /* ignore */ }
+      // Prefer RPC (deletes DB row + storage + related presence)
+      await supabase.rpc('end_live_room', { p_room_id: roomId })
+    } catch {
+      // Fallback: at least remove/close room
+      try {
+        await supabase.from('live_rooms').delete().eq('id', roomId)
+      } catch { /* ignore */ }
+    }
     router.push('/profile')
   }
+
+  // Best-effort automatic cleanup when the HOST leaves the page/tab
+  useEffect(() => {
+    if (!isHost || !isUuid(roomId)) return
+
+    const handler = () => {
+      // fire-and-forget; cron backstops if the browser cuts the request
+      void supabase.rpc('end_live_room', { p_room_id: roomId })
+    }
+
+    window.addEventListener('beforeunload', handler)
+    const vis = () => { if (document.hidden) handler() }
+    document.addEventListener('visibilitychange', vis)
+
+    // Also try on unmount (route change in SPA)
+    return () => {
+      window.removeEventListener('beforeunload', handler)
+      document.removeEventListener('visibilitychange', vis)
+      handler()
+    }
+  }, [isHost, roomId])
 
   function copyLobbyLink() {
     try {
@@ -445,5 +456,4 @@ function LogoIcon() {
     </svg>
   )
 }
-
 
