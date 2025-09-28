@@ -12,11 +12,19 @@ export default function EditProfilePage() {
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  const [userId, setUserId] = useState<string | null>(null)
+
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [bio, setBio] = useState('')
   const [timeZone, setTimeZone] = useState<string>('auto')
+
+  // uniqueness validation state
+  const [usernameChecking, setUsernameChecking] = useState(false)
+  const [displayChecking, setDisplayChecking] = useState(false)
+  const [usernameError, setUsernameError] = useState<string | null>(null)
+  const [displayError, setDisplayError] = useState<string | null>(null)
 
   // avatar file handling
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -53,6 +61,7 @@ export default function EditProfilePage() {
         router.replace(`/login?next=${next}`)
         return
       }
+      setUserId(user.id)
       try {
         const p = await fetchMyProfile()
         if (p) {
@@ -99,6 +108,62 @@ export default function EditProfilePage() {
     }
   }
 
+  // normalize usernames to a safe charset (lowers ambiguity in uniqueness)
+  function normalizeUsername(raw: string) {
+    const lower = raw.toLowerCase()
+    // allow a-z, 0-9, underscore; collapse spaces/dots to underscore
+    return lower.replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32)
+  }
+
+  async function checkUsernameUnique(name: string) {
+    if (!userId) return
+    const candidate = normalizeUsername(name)
+    setUsername(candidate)
+    setUsernameError(null)
+    if (!candidate) {
+      setUsernameError('Username is required')
+      return
+    }
+    setUsernameChecking(true)
+    try {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('username', candidate)
+        .neq('id', userId)
+      if (error) throw error
+      if ((count ?? 0) > 0) setUsernameError('That username is taken')
+    } catch (e: any) {
+      setUsernameError(e?.message || 'Could not validate username')
+    } finally {
+      setUsernameChecking(false)
+    }
+  }
+
+  async function checkDisplayNameUnique(name: string) {
+    if (!userId) return
+    const trimmed = name.trim()
+    setDisplayError(null)
+    if (!trimmed) {
+      setDisplayError('Display name is required')
+      return
+    }
+    setDisplayChecking(true)
+    try {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('display_name', trimmed)
+        .neq('id', userId)
+      if (error) throw error
+      if ((count ?? 0) > 0) setDisplayError('That display name is taken')
+    } catch (e: any) {
+      setDisplayError(e?.message || 'Could not validate display name')
+    } finally {
+      setDisplayChecking(false)
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -107,13 +172,23 @@ export default function EditProfilePage() {
       const { data: { user }, error: authErr } = await supabase.auth.getUser()
       if (authErr || !user) throw authErr || new Error('Not signed in')
 
+      // Run final uniqueness checks before save
+      await Promise.all([
+        checkUsernameUnique(username),
+        checkDisplayNameUnique(displayName),
+      ])
+
+      if (usernameError || displayError || usernameChecking || displayChecking) {
+        throw new Error('Please fix the highlighted fields')
+      }
+
       // upload avatar if user picked a new file
       const uploadedUrl = await uploadAvatarIfNeeded(user.id)
       const finalAvatarUrl = uploadedUrl ?? avatarUrl
 
       await saveProfile({
-        username,
-        display_name: displayName,
+        username: normalizeUsername(username),
+        display_name: displayName.trim(),
         avatar_url: finalAvatarUrl || undefined,
         bio,
         time_zone: timeZone === 'auto' ? browserTz : timeZone,
@@ -182,9 +257,12 @@ export default function EditProfilePage() {
           <input
             className="px-3 py-2 rounded-md bg-zinc-950 border border-white/10 text-white placeholder:text-white/40"
             value={displayName}
-            onChange={(e)=>setDisplayName(e.target.value)}
+            onChange={(e)=>{ setDisplayName(e.target.value); setDisplayError(null) }}
+            onBlur={(e)=>{ void checkDisplayNameUnique(e.target.value) }}
             required
           />
+          {displayChecking && <span className="text-xs text-white/60">Checking availability…</span>}
+          {displayError && <span className="text-xs text-red-400">{displayError}</span>}
         </label>
 
         <label className="grid gap-1 text-sm">
@@ -192,8 +270,13 @@ export default function EditProfilePage() {
           <input
             className="px-3 py-2 rounded-md bg-zinc-950 border border-white/10 text-white placeholder:text-white/40"
             value={username}
-            onChange={(e)=>setUsername(e.target.value)}
+            onChange={(e)=>{ setUsername(e.target.value); setUsernameError(null) }}
+            onBlur={(e)=>{ void checkUsernameUnique(e.target.value) }}
+            placeholder="letters, numbers, underscores"
+            required
           />
+          {usernameChecking && <span className="text-xs text-white/60">Checking availability…</span>}
+          {usernameError && <span className="text-xs text-red-400">{usernameError}</span>}
         </label>
 
         {/* Time zone */}
@@ -226,7 +309,7 @@ export default function EditProfilePage() {
 
         <div className="flex items-center gap-2">
           <button
-            disabled={saving}
+            disabled={saving || usernameChecking || displayChecking || !!usernameError || !!displayError}
             className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium text-black disabled:opacity-60"
           >
             {saving ? 'Saving…' : 'Save & Continue'}
@@ -243,4 +326,5 @@ export default function EditProfilePage() {
     </div>
   )
 }
+
 
