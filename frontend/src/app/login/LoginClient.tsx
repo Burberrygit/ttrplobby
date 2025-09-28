@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
+const SITE =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : '')
+
 export default function LoginClient() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('')
@@ -35,14 +39,19 @@ export default function LoginClient() {
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault()
-    const origin = window.location.origin
+
+    // Remember intended destination (URL ?next or current path)
+    if (typeof window !== 'undefined') {
+      const n = searchParams?.get('next') || (window.location.pathname + window.location.search)
+      sessionStorage.setItem('nextAfterLogin', n)
+    }
+
     const next =
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
-    // Always carry `next` into the callback URL so the callback page can honor it.
     const redirect = next
-      ? `${origin}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${origin}/auth/callback`
+      ? `${SITE}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${SITE}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -52,13 +61,18 @@ export default function LoginClient() {
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
-    const origin = window.location.origin
+    // Remember intended destination (URL ?next or current path)
+    if (typeof window !== 'undefined') {
+      const n = searchParams?.get('next') || (window.location.pathname + window.location.search)
+      sessionStorage.setItem('nextAfterLogin', n)
+    }
+
     const next =
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
     const redirect = next
-      ? `${origin}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${origin}/auth/callback`
+      ? `${SITE}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${SITE}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -139,4 +153,3 @@ export default function LoginClient() {
     </div>
   )
 }
-
