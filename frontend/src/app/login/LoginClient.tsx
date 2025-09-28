@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
-function getSiteUrl() {
-  // Use the canonical host from env (Netlify), fall back to current origin in the browser.
-  const fromEnv = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
-  if (fromEnv && typeof fromEnv === 'string') return fromEnv
+function siteUrl() {
+  const v = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
+  if (v) return v
   if (typeof window !== 'undefined') return window.location.origin
   return ''
 }
@@ -42,15 +41,13 @@ export default function LoginClient() {
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault()
-    const base = getSiteUrl()
-    // remember where the user was trying to go (if not already set)
+    const base = siteUrl()
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
       sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
     const next =
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
-    // Always carry `next` into the callback URL so the callback page can honor it.
     const redirect = next
       ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
       : `${base}/auth/callback`
@@ -63,8 +60,7 @@ export default function LoginClient() {
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
-    const base = getSiteUrl()
-    // remember where the user was trying to go (if not already set)
+    const base = siteUrl()
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
       sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
@@ -84,7 +80,6 @@ export default function LoginClient() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Banner/header like landing page */}
       <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between relative z-50">
           <a href="/" className="flex items-center gap-2">
@@ -94,7 +89,6 @@ export default function LoginClient() {
         </div>
       </header>
 
-      {/* Page content */}
       <div className="min-h-[calc(100vh-65px)] flex items-center justify-center px-4">
         <div className="bg-zinc-900 p-6 rounded-xl shadow-xl w-full max-w-md">
           <h1 className="text-xl font-bold mb-4">Sign in to ttrplobby</h1>
@@ -136,7 +130,6 @@ export default function LoginClient() {
                 </button>
               </div>
 
-              {/* Small inline sign-up link */}
               <p className="text-sm text-zinc-400 mt-4">
                 Need an account?{' '}
                 <a href="/signup" className="text-emerald-400 hover:text-emerald-300">Sign up</a>
@@ -154,4 +147,3 @@ export default function LoginClient() {
     </div>
   )
 }
-
