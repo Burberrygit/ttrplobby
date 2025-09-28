@@ -204,11 +204,28 @@ export default function SearchClient() {
   const effectiveTz = tz === 'Any' || tz === 'local' ? MY_TZ : tz
 
   return (
-    <>
+    <div className="max-w-6xl mx-auto w-full px-4">
+      {/* Header with spaced buttons */}
+      <div className="mb-4 flex items-center justify-between">
+        <a
+          href="/"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+        >
+          <LogoIcon />
+          <span className="font-semibold">ttrplobby</span>
+        </a>
+        <a
+          href="/profile"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+        >
+          Profile
+        </a>
+      </div>
+
       <h1 className="text-2xl font-bold text-white">Search games</h1>
       <p className="text-white/70 mt-1">Find a table by title, system, vibe, time zone, or availability.</p>
 
-      {/* Search + Filters Bar (no dropdowns; everything inline) */}
+      {/* Search + Filters Bar (wider container) */}
       <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
         <div className="grid gap-3">
           {/* Row 1: query + core selects */}
@@ -242,7 +259,7 @@ export default function SearchClient() {
             />
           </div>
 
-          {/* Row 2: inline toggles (formerly in Filters dropdown) */}
+          {/* Row 2: inline toggles */}
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" className="accent-brand" checked={onlySeats} onChange={e => setOnlySeats(e.target.checked)} />
@@ -284,7 +301,7 @@ export default function SearchClient() {
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }
 
@@ -353,6 +370,15 @@ function SearchIcon() {
   )
 }
 
+function LogoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  )
+}
+
 /* --------------------------- helpers --------------------------- */
 function decode(s: string) {
   try { return decodeURIComponent(s) } catch { return s }
@@ -383,4 +409,3 @@ function fmtDateInTz(iso: string, tz: string): string {
     return d.toLocaleString()
   }
 }
-
