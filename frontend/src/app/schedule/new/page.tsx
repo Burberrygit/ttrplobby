@@ -121,26 +121,26 @@ export default function NewSchedulePage() {
   return (
     <div className="min-h-screen flex flex-col text-white">
       <PageShell className="flex-1">
-        {/* Wrapper positions the buttons OUTSIDE the card but visually over the corners */}
-        <div className="relative w-full max-w-[1200px] mx-auto">
-          {/* Corner buttons (outside the card, just above its top corners) */}
+        {/* Wrapper positions the buttons OUTSIDE the card; padding-top creates a small gap */}
+        <div className="relative w-full max-w-[1200px] mx-auto pt-12">
+          {/* Corner buttons (outside, just above the card corners) */}
           <a
             href="/"
             aria-label="Go to ttrplobby"
-            className="absolute -top-10 left-3 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
+            className="absolute top-0 left-3 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
           >
             <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
           <a
             href="/profile"
             aria-label="Go to profile"
-            className="absolute -top-10 right-3 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
+            className="absolute top-0 right-3 z-20 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur px-4 py-2 text-sm hover:border-white/30 transition"
           >
             Profile
           </a>
 
-          {/* Add more top margin so the card sits further below the floating buttons */}
-          <div className="mt-12 overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+          {/* Card sits below due to wrapper padding, leaving a small gap */}
+          <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
             <h1 className="text-2xl font-bold">Post a new game</h1>
             <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
