@@ -124,7 +124,8 @@ export default function NewSchedulePage() {
       <PageShell className="flex-1">
         <HeaderBar />
 
-        <div className="w-full overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+        {/* Wide, centered card */}
+        <div className="w-full max-w-[1600px] mx-auto overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
           <h1 className="text-2xl font-bold">Post a new game</h1>
           <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
@@ -261,7 +262,7 @@ export default function NewSchedulePage() {
 
       {/* Pinned footer */}
       <footer className="border-t border-white/10 px-6">
-        <div className="max-w-screen-2xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-[1600px] mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© 2025 ttrplobby</div>
           <nav className="flex items-center gap-4">
             <a href="/terms" className="hover:text-white">Terms</a>
@@ -277,7 +278,8 @@ export default function NewSchedulePage() {
 /* ------------------------------ layout helpers ----------------------------- */
 
 function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`max-w-screen-2xl mx-auto px-8 py-10 ${className}`}>{children}</div>
+  // Full-bleed shell; let inner card control its own max width
+  return <div className={`w-full px-8 py-10 ${className}`}>{children}</div>
 }
 
 function HeaderBar() {
@@ -324,4 +326,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
