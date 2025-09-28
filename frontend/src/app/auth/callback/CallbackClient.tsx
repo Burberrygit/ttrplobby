@@ -7,6 +7,10 @@ import { supabase } from '@/lib/supabaseClient'
 
 const CANON = 'www.ttrplobby.com'
 
+// safe sessionStorage helpers (no-ops if blocked)
+const sget = (k: string) => { try { return window.sessionStorage.getItem(k) } catch { return null } }
+const sdel = (k: string) => { try { window.sessionStorage.removeItem(k) } catch {} }
+
 export default function CallbackClient() {
   const router = useRouter()
   const sp = useSearchParams()
@@ -16,56 +20,66 @@ export default function CallbackClient() {
     let mounted = true
     let timeout: ReturnType<typeof setTimeout> | null = null
 
-    // 0) Enforce canonical host before letting the SDK parse the URL
+    // 0) Enforce canonical host AND PRESERVE THE HASH (tokens may be in #fragment)
     if (typeof window !== 'undefined' && window.location.hostname !== CANON) {
-      const { protocol, pathname, search } = window.location
-      window.location.replace(`${protocol}//${CANON}${pathname}${search}`)
+      const { protocol, pathname, search, hash } = window.location
+      window.location.replace(`${protocol}//${CANON}${pathname}${search}${hash || ''}`)
       return
     }
 
-    const nextFromQuery = sp.get('next') || undefined
-    const nextFromStorage =
-      typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
+    const nextFromQuery = sp?.get('next') || undefined
+    const nextFromStorage = typeof window !== 'undefined' ? sget('nextAfterLogin') || undefined : undefined
     const intended = nextFromQuery || nextFromStorage || '/profile'
 
     ;(async () => {
       try {
-        // 1) If the SDK already parsed the URL and we have a session, redirect.
+        // 1) If session already present, go now.
         const first = await supabase.auth.getSession()
         if (!mounted) return
         if (first.data.session) {
-          if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
+          sdel('nextAfterLogin')
           router.replace(intended)
           return
         }
 
-        // 2) Wait briefly for the SDK to finish parsing; then decide.
+        // 2) If we have an OAuth code in the URL (query or fragment), exchange it explicitly.
+        const href = typeof window !== 'undefined' ? window.location.href : ''
+        const hasCode = /[?#]code=/.test(href)
+        if (hasCode) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(href)
+          if (!mounted) return
+          if (!error && data.session) {
+            sdel('nextAfterLogin')
+            router.replace(intended)
+            return
+          }
+        }
+
+        // 3) Give the SDK a moment to parse tokens that may be in the hash.
+        //    (detectSessionInUrl=true can handle #access_token flows.)
         timeout = setTimeout(async () => {
           if (!mounted) return
           const { data: { session } } = await supabase.auth.getSession()
           if (session) {
-            if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
+            sdel('nextAfterLogin')
             router.replace(intended)
             return
           }
-          // 3) No session even after parsing -> go back to login with `next`.
           setStatus('No auth data found in URL. Returning to login…')
           router.replace(`/login?next=${encodeURIComponent(intended)}`)
         }, 700)
 
-        // Also listen for auth state changes in case parsing finishes sooner.
-        const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+        // 4) Also listen for auth state in case parsing finishes sooner.
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
           if (!mounted) return
           if (s?.user) {
             if (timeout) clearTimeout(timeout)
-            if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
+            sdel('nextAfterLogin')
             router.replace(intended)
           }
         })
 
-        return () => {
-          sub.subscription.unsubscribe()
-        }
+        return () => { subscription.unsubscribe() }
       } catch (e: any) {
         setStatus(e?.message || 'Unexpected error. Returning to login…')
         router.replace(`/login?next=${encodeURIComponent(intended)}`)
@@ -87,5 +101,4 @@ export default function CallbackClient() {
     </div>
   )
 }
-
 
