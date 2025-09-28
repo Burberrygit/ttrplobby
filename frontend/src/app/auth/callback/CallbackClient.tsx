@@ -12,40 +12,61 @@ export default function CallbackClient() {
   useEffect(() => {
     (async () => {
       try {
-        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
-        if (error) {
-          setStatus(error.message)
-          setTimeout(() => router.replace('/login'), 1500)
+        const href = window.location.href
+        const url = new URL(href)
+        const code = url.searchParams.get('code')
+
+        // Compute intended destination early
+        const nextFromQuery = url.searchParams.get('next') || undefined
+        const nextFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
+        const fallback = '/profile'
+        const intended = nextFromQuery || nextFromStorage || fallback
+
+        // If no ?code= in the URL, don't call exchange — either we already have a
+        // session (refresh/back button), or the user hit the route directly.
+        if (!code) {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.user) {
+            if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
+            router.replace(intended)
+            return
+          }
+          // No session and no code -> bounce to login, keep `next`
+          router.replace(`/login?next=${encodeURIComponent(intended)}`)
           return
         }
 
-        const { data: userData } = await supabase.auth.getUser()
-        const uid = userData.user?.id
+        // First-time, real callback: exchange code for a session
+        const { error } = await supabase.auth.exchangeCodeForSession(href)
+        if (error) {
+          setStatus(error.message)
+          setTimeout(() => router.replace(`/login?next=${encodeURIComponent(intended)}`), 1200)
+          return
+        }
 
         // Defensive: ensure a profiles row exists for first-time users
+        const { data: userData } = await supabase.auth.getUser()
+        const uid = userData.user?.id
         if (uid) {
           await supabase.from('profiles').upsert({ id: uid })
         }
 
-        const destFromQuery = searchParams?.get('next') || undefined
-        const destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
-
-        let needsOnboarding = false
+        // Decide final destination (onboarding if no username yet)
+        let destination = intended
         if (uid) {
           const { data: prof } = await supabase
             .from('profiles')
             .select('username')
             .eq('id', uid)
             .maybeSingle()
-          needsOnboarding = !prof?.username
+          if (!prof?.username) destination = '/onboarding'
         }
 
-        const dest = needsOnboarding ? '/onboarding' : (destFromQuery || destFromStorage || '/profile')
         if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
-        router.replace(dest)
+        router.replace(destination)
       } catch (e: any) {
         setStatus(e?.message || 'Unexpected error')
-        setTimeout(() => router.replace('/login'), 1500)
+        setTimeout(() => router.replace('/login'), 1200)
       }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -58,3 +79,4 @@ export default function CallbackClient() {
     </div>
   )
 }
+
