@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function LiveSearchPage() {
   const router = useRouter();
@@ -13,10 +14,19 @@ export default function LiveSearchPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function tryOnce(body: Record<string, unknown>) {
+    async function callApi(body: Record<string, unknown>) {
+      // Get the current session token to authenticate the API request
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return { ok: false, status: 401 };
+
       const res = await fetch('/api/live/quick-join', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Pass the Supabase access token for server-side user resolution
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(body),
         credentials: 'include',
       });
@@ -24,9 +34,9 @@ export default function LiveSearchPage() {
       if (res.ok) {
         const { gameId } = await res.json();
         if (!cancelled) router.replace(`/live/${gameId}`);
-        return true;
+        return { ok: true, status: 200 };
       }
-      return false;
+      return { ok: false, status: res.status };
     }
 
     async function loop() {
@@ -38,21 +48,27 @@ export default function LiveSearchPage() {
       };
 
       // initial strict search
-      if (await tryOnce({ ...base, widen: false })) return;
+      {
+        const r = await callApi({ ...base, widen: false });
+        if (r.ok) return;
+        if (r.status === 401) { setStatus('failed'); return; } // not logged in
+      }
 
       setStatus('expanding');
 
-      // progressively widen length tolerance, then relax flags
+      // progressively widen length tolerance
       const tolerances = [15, 30, 45, 60];
       for (const tol of tolerances) {
         if (Date.now() > stopAt.current) break;
-        if (await tryOnce({ ...base, toleranceMinutes: tol, widen: true })) return;
+        const r = await callApi({ ...base, toleranceMinutes: tol, widen: true });
+        if (r.ok) return;
         await new Promise(r => setTimeout(r, 1500));
       }
 
       // final pass: ignore newbie/adult flags but keep system
       if (Date.now() <= stopAt.current) {
-        if (await tryOnce({ ...base, ignoreFlags: true, widen: true })) return;
+        const r = await callApi({ ...base, ignoreFlags: true, widen: true });
+        if (r.ok) return;
       }
 
       setStatus('failed');
@@ -67,7 +83,6 @@ export default function LiveSearchPage() {
     <main className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="flex flex-col items-center text-center gap-4">
         <div className="relative w-28 h-28">
-          {/* The logo should exist at /public/logo.png in your repo */}
           <Image
             src="/logo.png"
             alt="TTRPLobby"
@@ -95,3 +110,4 @@ export default function LiveSearchPage() {
     </main>
   );
 }
+
