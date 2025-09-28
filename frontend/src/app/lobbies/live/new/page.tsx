@@ -48,7 +48,15 @@ export default function NewLiveLobby() {
     })()
   }, [router])
 
+  // Revoke object URLs when preview changes/unmounts to avoid leaks
+  useEffect(() => {
+    return () => {
+      if (posterPreview) URL.revokeObjectURL(posterPreview)
+    }
+  }, [posterPreview])
+
   function onPickPoster(file?: File | null) {
+    if (posterPreview) URL.revokeObjectURL(posterPreview)
     if (!file) { setPosterFile(null); setPosterPreview(''); return }
     const MAX_MB = 5
     if (!file.type.startsWith('image/')) { setErrorMsg('Please select an image file.'); return }
@@ -183,3 +191,5 @@ function LogoIcon() {
     </svg>
   )
 }
+``` :contentReference[oaicite:0]{index=0}
+
