@@ -16,51 +16,58 @@ export default function CallbackClient() {
         const url = new URL(href)
         const code = url.searchParams.get('code')
 
-        // Compute intended destination early
-        const nextFromQuery = url.searchParams.get('next') || undefined
-        const nextFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
-        const fallback = '/profile'
-        const intended = nextFromQuery || nextFromStorage || fallback
+        const destFromQuery = url.searchParams.get('next') || undefined
+        const destFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || undefined : undefined
+        const intended = destFromQuery || destFromStorage || '/profile'
 
-        // If no ?code=, either already signed in (refresh) or hit the route directly.
+        console.debug('[callback] code?', !!code, 'intended:', intended)
+
         if (!code) {
           const { data: { session } } = await supabase.auth.getSession()
+          console.debug('[callback] no code, session?', !!session)
           if (session?.user) {
-            if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
+            sessionStorage.removeItem('nextAfterLogin')
             router.replace(intended)
             return
           }
-          router.replace(`/login?next=${encodeURIComponent(intended)}`)
+          setStatus('No auth code in URL and no active session. Returning to login…')
+          setTimeout(() => router.replace(`/login?next=${encodeURIComponent(intended)}`), 1500)
           return
         }
 
-        // Real callback: exchange once
-        const { error } = await supabase.auth.exchangeCodeForSession(href)
+        const { data: exchangeData, error } = await supabase.auth.exchangeCodeForSession(href)
+        console.debug('[callback] exchange result:', { error, user: exchangeData?.user?.id })
         if (error) {
-          setStatus(error.message)
-          setTimeout(() => router.replace(`/login?next=${encodeURIComponent(intended)}`), 1200)
+          setStatus(`Auth exchange failed: ${error.message}`)
+          setTimeout(() => router.replace(`/login?next=${encodeURIComponent(intended)}`), 2500)
+          return
+        }
+
+        const { data: sess } = await supabase.auth.getSession()
+        console.debug('[callback] post-exchange session?', !!sess.session)
+        if (!sess.session) {
+          setStatus('No session after exchange (PKCE/cookies mismatch). Returning to login…')
+          setTimeout(() => router.replace(`/login?next=${encodeURIComponent(intended)}`), 2500)
           return
         }
 
         // Optional: onboarding gate
-        const { data: userData } = await supabase.auth.getUser()
-        const uid = userData.user?.id
-
         let destination = intended
-        if (uid) {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('id', uid)
-            .maybeSingle()
-          if (!prof?.username) destination = '/onboarding'
-        }
+        const uid = sess.session.user.id
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', uid)
+          .maybeSingle()
+        if (!prof?.username) destination = '/onboarding'
 
-        if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
-        router.replace(destination)
+        sessionStorage.removeItem('nextAfterLogin')
+        setStatus('Signed in. Taking you to your destination…')
+        setTimeout(() => router.replace(destination), 300)
       } catch (e: any) {
-        setStatus(e?.message || 'Unexpected error')
-        setTimeout(() => router.replace('/login'), 1200)
+        console.error('[callback] unexpected error', e)
+        setStatus(e?.message || 'Unexpected error. Returning to login…')
+        setTimeout(() => router.replace('/login'), 2500)
       }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -69,8 +76,8 @@ export default function CallbackClient() {
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100">
       <div className="bg-zinc-900 p-6 rounded-xl shadow-xl w-full max-w-md text-center">
         <p className="text-sm">{status}</p>
+        <p className="text-xs text-zinc-400 mt-2">Tip: open DevTools Console for detailed logs (prefix “[callback]”).</p>
       </div>
     </div>
   )
 }
-
