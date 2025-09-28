@@ -84,33 +84,69 @@ export default function Client() {
   }, []);
 
   return (
-    <main className="min-h-[70vh] flex items-center justify-center p-6">
-      <div className="flex flex-col items-center text-center gap-4">
-        <div className="relative w-28 h-28">
-          <Image
-            src="/logo.png"
-            alt="TTRPLobby"
-            fill
-            className="animate-spin-slow object-contain"
-            priority
-          />
-        </div>
-        <h1 className="text-xl font-semibold">
-          {status === 'searching' ? 'Searching for active games…' :
-           status === 'expanding' ? 'Expanding search…' :
-           'No matching games found right now'}
-        </h1>
-        <p className="text-sm opacity-80 max-w-prose">
-          {status === 'failed'
-            ? 'Try again in a minute, tweak your filters, or create a new live game.'
-            : 'Hang tight while we look for an open table that fits your preferences.'}
-        </p>
+    <div className="min-h-screen flex flex-col text-white">
+      {/* Top buttons */}
+      <div className="px-4 pt-4 flex justify-end gap-2">
+        <a
+          href="/"
+          className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
+        >
+          ttrplobby
+        </a>
+        <a
+          href="/profile"
+          className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
+        >
+          Profile
+        </a>
       </div>
+
+      {/* Main content */}
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="relative w-28 h-28">
+            <Image
+              src="/logo.png"
+              alt="TTRPLobby"
+              fill
+              className="animate-spin-slow object-contain"
+              priority
+            />
+          </div>
+          <h1 className="text-xl font-semibold">
+            We are searching for a game…
+          </h1>
+          <p className="text-sm text-white/80 max-w-prose">
+            Please stay on this page until you are connected.
+          </p>
+
+          {/* Optional subtle status line */}
+          <p className="text-xs text-white/60">
+            {status === 'searching'
+              ? 'Searching with your exact filters.'
+              : status === 'expanding'
+              ? 'No instant match — expanding the search window.'
+              : 'No matching games found right now.'}
+          </p>
+        </div>
+      </main>
+
+      {/* Pinned footer */}
+      <footer className="border-t border-white/10 px-4">
+        <div className="max-w-4xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
+      </footer>
 
       <style jsx global>{`
         @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-spin-slow { animation: spin-slow 2.5s linear infinite; }
       `}</style>
-    </main>
+    </div>
   );
 }
