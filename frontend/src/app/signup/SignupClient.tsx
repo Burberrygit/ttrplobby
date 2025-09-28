@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
-function getSiteUrl() {
-  const fromEnv = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
-  if (fromEnv && typeof fromEnv === 'string') return fromEnv
+function siteUrl() {
+  const v = (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_SITE_URL) as string | undefined
+  if (v) return v
   if (typeof window !== 'undefined') return window.location.origin
   return ''
 }
@@ -41,7 +41,7 @@ export default function SignupClient() {
 
   async function handleEmailSignup(e: React.FormEvent) {
     e.preventDefault()
-    const base = getSiteUrl()
+    const base = siteUrl()
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
       sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
@@ -52,7 +52,6 @@ export default function SignupClient() {
       ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
       : `${base}/auth/callback`
 
-    // Magic link also creates the account
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirect }
@@ -61,7 +60,7 @@ export default function SignupClient() {
   }
 
   async function handleOAuth(provider: 'google' | 'discord') {
-    const base = getSiteUrl()
+    const base = siteUrl()
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
       sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
     }
@@ -81,7 +80,6 @@ export default function SignupClient() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Banner/header like landing page */}
       <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between relative z-50">
           <a href="/" className="flex items-center gap-2">
@@ -91,7 +89,6 @@ export default function SignupClient() {
         </div>
       </header>
 
-      {/* Page content */}
       <div className="min-h-[calc(100vh-65px)] flex items-center justify-center px-4">
         <div className="bg-zinc-900 p-6 rounded-xl shadow-xl w-full max-w-md">
           <h1 className="text-xl font-bold mb-4">Create your ttrplobby account</h1>
