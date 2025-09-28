@@ -321,4 +321,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
