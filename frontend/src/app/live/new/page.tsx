@@ -162,154 +162,184 @@ export default function LiveHostSetup() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 text-white">
-      <TopBanner />
-      <h1 className="text-2xl font-bold">Start a live game</h1>
-      <p className="text-white/70 mt-1">Spin up a lobby right now. Players can find and join instantly.</p>
+    <div className="min-h-screen flex flex-col text-white">
+      <main className="flex-1">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <HeaderBar />
 
-      <div className="mt-6 grid md:grid-cols-[280px,1fr] gap-4">
-        {/* Poster picker */}
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
-          <div className="text-sm font-medium mb-2">Poster image</div>
-          <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/10 bg-white/5">
-            {localPosterPreview || form.poster_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={localPosterPreview || form.poster_url!} alt="Poster" className="w-full h-full object-cover" />
-            ) : (
-              <div className="h-full w-full grid place-items-center text-white/50 text-sm">
-                No image selected
+          <h1 className="text-2xl font-bold">Start a live game</h1>
+          <p className="text-white/70 mt-1">Spin up a lobby right now. Players can find and join instantly.</p>
+
+          <div className="mt-6 grid md:grid-cols-[280px,1fr] gap-4">
+            {/* Poster picker */}
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              <div className="text-sm font-medium mb-2">Poster image</div>
+              <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                {localPosterPreview || form.poster_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={localPosterPreview || form.poster_url!} alt="Poster" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="h-full w-full grid place-items-center text-white/50 text-sm">
+                    No image selected
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="mt-3">
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={onPickFile} className="hidden" id="posterInput" />
-            <label
-              htmlFor="posterInput"
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 cursor-pointer"
-            >
-              {uploading ? 'Uploading…' : 'Choose image'}
-            </label>
-            {form.poster_url && (
-              <button
-                className="ml-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
-                onClick={() => { onChange('poster_url', ''); onChange('poster_storage_path', ''); setLocalPosterPreview(null) }}
-              >
-                Remove
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Details */}
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="text-sm">
-              <div className="mb-1 text-white/70">Title</div>
-              <input
-                value={form.title}
-                onChange={(e) => onChange('title', e.target.value)}
-                placeholder="e.g., Beginner one-shot"
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              />
-            </label>
-            <label className="text-sm">
-              <div className="mb-1 text-white/70">System</div>
-              <select
-                value={form.system}
-                onChange={(e) => onChange('system', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              >
-                {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </label>
-
-            <label className="text-sm md:col-span-2">
-              <div className="mb-1 text-white/70">Vibe (optional)</div>
-              <input
-                value={form.vibe}
-                onChange={(e) => onChange('vibe', e.target.value)}
-                placeholder="Casual, spooky one-shot, rules-light…"
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              />
-            </label>
-
-            <label className="text-sm">
-              <div className="mb-1 text-white/70">Seats</div>
-              <input
-                type="number" min={1} max={10}
-                value={form.seats}
-                onChange={(e) => onChange('seats', Math.max(1, Math.min(10, Number(e.target.value || 0))))}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              />
-            </label>
-            <label className="text-sm">
-              <div className="mb-1 text-white/70">Length (Hours)</div>
-              <input
-                type="number" min={0.5} step={0.25}
-                value={(form.length_min / 60).toString()}
-                onChange={(e) => {
-                  const hours = Math.max(0.25, Number(e.target.value || 0))
-                  onChange('length_min', Math.round(hours * 60))
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              />
-            </label>
-
-            <div className="text-sm flex items-center gap-3">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.welcomes_new}
-                  onChange={(e) => onChange('welcomes_new', e.target.checked)}
-                  className="accent-[#29e0e3]"
-                />
-                Welcomes new players
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.is_mature}
-                  onChange={(e) => onChange('is_mature', e.target.checked)}
-                  className="accent-[#29e0e3]"
-                />
-                18+ content
-              </label>
+              <div className="mt-3">
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={onPickFile} className="hidden" id="posterInput" />
+                <label
+                  htmlFor="posterInput"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 cursor-pointer"
+                >
+                  {uploading ? 'Uploading…' : 'Choose image'}
+                </label>
+                {form.poster_url && (
+                  <button
+                    className="ml-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
+                    onClick={() => { onChange('poster_url', ''); onChange('poster_storage_path', ''); setLocalPosterPreview(null) }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
 
-            <label className="text-sm md:col-span-2">
-              <div className="mb-1 text-white/70">Discord link (optional)</div>
-              <input
-                value={form.discord_url || ''}
-                onChange={(e) => onChange('discord_url', e.target.value)}
-                placeholder="discord.gg/your-invite or https://discord.gg/…"
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              />
-            </label>
-            <label className="text-sm md:col-span-2">
-              <div className="mb-1 text-white/70">VTT / Game link (optional)</div>
-              <input
-                value={form.game_url || ''}
-                onChange={(e) => onChange('game_url', e.target.value)}
-                placeholder="fvtt.life or https://your-vtt.example.com/…"
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-              />
-            </label>
-          </div>
+            {/* Details */}
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              <div className="grid md:grid-cols-2 gap-3">
+                <label className="text-sm">
+                  <div className="mb-1 text-white/70">Title</div>
+                  <input
+                    value={form.title}
+                    onChange={(e) => onChange('title', e.target.value)}
+                    placeholder="e.g., Beginner one-shot"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  />
+                </label>
+                <label className="text-sm">
+                  <div className="mb-1 text-white/70">System</div>
+                  <select
+                    value={form.system}
+                    onChange={(e) => onChange('system', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  >
+                    {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
 
-          {errorMsg && <div className="text-sm text-red-400 mt-3">{errorMsg}</div>}
+                <label className="text-sm md:col-span-2">
+                  <div className="mb-1 text-white/70">Vibe (optional)</div>
+                  <input
+                    value={form.vibe}
+                    onChange={(e) => onChange('vibe', e.target.value)}
+                    placeholder="Casual, spooky one-shot, rules-light…"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  />
+                </label>
 
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={startLobby}
-              disabled={submitting || !userId}
-              className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium disabled:opacity-60"
-            >
-              {submitting ? 'Starting…' : 'Start lobby'}
-            </button>
-            <a href="/profile" className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40">Cancel</a>
+                <label className="text-sm">
+                  <div className="mb-1 text-white/70">Seats</div>
+                  <input
+                    type="number" min={1} max={10}
+                    value={form.seats}
+                    onChange={(e) => onChange('seats', Math.max(1, Math.min(10, Number(e.target.value || 0))))}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  />
+                </label>
+                <label className="text-sm">
+                  <div className="mb-1 text-white/70">Length (Hours)</div>
+                  <input
+                    type="number" min={0.5} step={0.25}
+                    value={(form.length_min / 60).toString()}
+                    onChange={(e) => {
+                      const hours = Math.max(0.25, Number(e.target.value || 0))
+                      onChange('length_min', Math.round(hours * 60))
+                    }}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  />
+                </label>
+
+                <div className="text-sm flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={form.welcomes_new}
+                      onChange={(e) => onChange('welcomes_new', e.target.checked)}
+                      className="accent-[#29e0e3]"
+                    />
+                    Welcomes new players
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={form.is_mature}
+                      onChange={(e) => onChange('is_mature', e.target.checked)}
+                      className="accent-[#29e0e3]"
+                    />
+                    18+ content
+                  </label>
+                </div>
+
+                <label className="text-sm md:col-span-2">
+                  <div className="mb-1 text-white/70">Discord link (optional)</div>
+                  <input
+                    value={form.discord_url || ''}
+                    onChange={(e) => onChange('discord_url', e.target.value)}
+                    placeholder="discord.gg/your-invite or https://discord.gg/…"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  />
+                </label>
+                <label className="text-sm md:col-span-2">
+                  <div className="mb-1 text-white/70">VTT / Game link (optional)</div>
+                  <input
+                    value={form.game_url || ''}
+                    onChange={(e) => onChange('game_url', e.target.value)}
+                    placeholder="fvtt.life or https://your-vtt.example.com/…"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  />
+                </label>
+              </div>
+
+              {errorMsg && <div className="text-sm text-red-400 mt-3">{errorMsg}</div>}
+
+              <div className="mt-4 flex gap-3">
+                <button
+                  onClick={startLobby}
+                  disabled={submitting || !userId}
+                  className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium disabled:opacity-60"
+                >
+                  {submitting ? 'Starting…' : 'Start lobby'}
+                </button>
+                <a href="/profile" className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40">Cancel</a>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
+
+      {/* Pinned footer */}
+      <footer className="border-t border-white/10 px-6">
+        <div className="max-w-[1200px] mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+function HeaderBar() {
+  return (
+    <div className="mb-4 flex items-center justify-between">
+      <a href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
+        <LogoIcon /><span className="font-semibold">ttrplobby</span>
+      </a>
+      <a href="/profile" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
+        Profile
+      </a>
     </div>
   )
 }
