@@ -79,21 +79,40 @@ export default function LiveHostSetup() {
     if (!file) return
     try {
       setUploading(true)
+      setErrorMsg(null)
+
       // Preview
       const reader = new FileReader()
       reader.onload = () => setLocalPosterPreview(reader.result as string)
       reader.readAsDataURL(file)
 
-      // Upload to 'posters' bucket (public-read)
-      const fn = `live/${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`
-      const { data, error } = await supabase.storage.from('posters').upload(fn, file, { upsert: false })
+      // Ensure we have a user id (RLS requires owner/auth.uid())
+      let uid = userId
+      if (!uid) {
+        const { data: { user } } = await supabase.auth.getUser()
+        uid = user?.id ?? null
+        setUserId(uid)
+      }
+      if (!uid) throw new Error('Not signed in')
+
+      // 🔐 Upload to user-scoped path to satisfy Storage RLS
+      const safeName = file.name.replace(/\s+/g, '-')
+      const fn = `${uid}/live/${Date.now()}-${safeName}`
+
+      const { data, error } = await supabase.storage
+        .from('posters')
+        .upload(fn, file, {
+          upsert: false,
+          cacheControl: '3600',
+          contentType: file.type || 'image/*',
+        })
       if (error) throw error
 
       // Get public URL
-      const { data: pub } = supabase.storage.from('posters').getPublicUrl(data.path)
+      const { data: pub } = supabase.storage.from('posters').getPublicUrl(data.path ?? fn)
       onChange('poster_url', pub.publicUrl)
     } catch (e: any) {
-      setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters")')
+      setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters").')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -307,5 +326,6 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
 
