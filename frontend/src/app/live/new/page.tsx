@@ -16,6 +16,7 @@ type NewRoom = {
   discord_url?: string | null
   game_url?: string | null
   poster_url?: string | null
+  poster_storage_path?: string | null
 }
 
 const SYSTEMS = [
@@ -49,7 +50,8 @@ export default function LiveHostSetup() {
     is_mature: false,
     discord_url: '',
     game_url: '',
-    poster_url: ''
+    poster_url: '',
+    poster_storage_path: ''
   })
 
   const [uploading, setUploading] = useState(false)
@@ -108,9 +110,11 @@ export default function LiveHostSetup() {
         })
       if (error) throw error
 
-      // Get public URL
-      const { data: pub } = supabase.storage.from('posters').getPublicUrl(data.path ?? fn)
+      // Get public URL + remember storage key (for later deletion)
+      const storagePath = data.path ?? fn
+      const { data: pub } = supabase.storage.from('posters').getPublicUrl(storagePath)
       onChange('poster_url', pub.publicUrl)
+      onChange('poster_storage_path', storagePath)
     } catch (e: any) {
       setErrorMsg(e?.message || 'Failed to upload image (check Storage bucket "posters").')
     } finally {
@@ -143,6 +147,7 @@ export default function LiveHostSetup() {
         discord_url: discordUrl,
         game_url: gameUrl,
         poster_url: form.poster_url || null,
+        poster_storage_path: form.poster_storage_path || null,
         status: 'open'
       }, { onConflict: 'id' })
       if (error) {
@@ -187,7 +192,7 @@ export default function LiveHostSetup() {
             {form.poster_url && (
               <button
                 className="ml-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
-                onClick={() => { onChange('poster_url', ''); setLocalPosterPreview(null) }}
+                onClick={() => { onChange('poster_url', ''); onChange('poster_storage_path', ''); setLocalPosterPreview(null) }}
               >
                 Remove
               </button>
@@ -326,6 +331,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
-
