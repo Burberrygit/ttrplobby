@@ -59,14 +59,19 @@ export default function LiveRoomPage() {
   const [peers, setPeers] = useState<Array<{ id: string; name: string; avatar: string | null }>>([])
   const [chat, setChat] = useState<ChatMsg[]>([])
   const [text, setText] = useState('')
+
+  // Realtime connection state
   const [rtStatus, setRtStatus] = useState<'connecting' | 'connected' | 'error' | 'closed'>('connecting')
+  const [rtInfo, setRtInfo] = useState<string | null>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const retryRef = useRef(0)
+  const unmountedRef = useRef(false)
 
   useEffect(() => {
     // Do nothing until we have a valid UUID route param
     if (!isUuid(roomId)) return
+    unmountedRef.current = false
 
-    let unsubscribed = false
     let chCleanup: (() => void) | null = null
 
     ;(async () => {
@@ -91,7 +96,7 @@ export default function LiveRoomPage() {
         .eq('id', roomId)
         .maybeSingle()
 
-      if (unsubscribed) return
+      if (unmountedRef.current) return
 
       if (error) {
         setErrorMsg(error.message)
@@ -99,9 +104,23 @@ export default function LiveRoomPage() {
         setRoom(roomRow as RoomDetails)
       }
 
-      // Join realtime channel AFTER we know the valid id
+      // Connect to realtime
+      connectRealtime({ userId: user.id, name: myName, avatar: prof?.avatar_url ?? null })
+    })()
+
+    function connectRealtime(self: { userId: string; name: string; avatar: string | null }) {
+      // Clean any existing channel
+      if (channelRef.current) {
+        try { channelRef.current.unsubscribe() } catch {}
+        try { supabase.removeChannel(channelRef.current) } catch {}
+        channelRef.current = null
+      }
+
+      setRtStatus('connecting')
+      setRtInfo(retryRef.current > 0 ? `retry #${retryRef.current}` : null)
+
       const ch = supabase.channel(`live:room:${roomId}`, {
-        config: { presence: { key: user.id } }
+        config: { presence: { key: self.userId } }
       })
       channelRef.current = ch
 
@@ -120,40 +139,61 @@ export default function LiveRoomPage() {
         setChat(prev => [...prev, msg].slice(-200))
       })
 
-      await ch.subscribe(async (status) => {
+      ch.subscribe(async (status) => {
+        if (unmountedRef.current) return
         if (status === 'SUBSCRIBED') {
+          retryRef.current = 0
           setRtStatus('connected')
-          await ch.track({ name: myName, avatar: prof?.avatar_url ?? null })
+          setRtInfo(null)
+          await ch.track({ name: self.name, avatar: self.avatar })
           const hello: ChatMsg = {
             id: crypto.randomUUID(),
             userId: 'system',
             name: 'System',
             avatar: null,
-            text: `${myName} joined the lobby`,
+            text: `${self.name} joined the lobby`,
             ts: Date.now()
           }
           ch.send({ type: 'broadcast', event: 'chat', payload: hello })
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setRtStatus('error')
+          setRtInfo(status === 'TIMED_OUT' ? 'Timed out' : 'Channel error')
+          scheduleReconnect(self)
         } else if (status === 'CLOSED') {
           setRtStatus('closed')
+          setRtInfo('Closed')
+          scheduleReconnect(self)
         }
       })
 
-      chCleanup = () => { ch.unsubscribe() }
-    })()
+      // cleanup helper
+      chCleanup = () => { try { ch.unsubscribe() } catch {} }
+    }
+
+    function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
+      if (unmountedRef.current) return
+      const tries = retryRef.current + 1
+      retryRef.current = tries
+      const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(tries - 1, 5))) // 1s,2s,4s,8s,16s,32s
+      setRtInfo(`Retrying in ${Math.round(delay/1000)}s…`)
+      setTimeout(() => {
+        if (unmountedRef.current) return
+        connectRealtime(self)
+      }, delay)
+    }
 
     return () => {
-      unsubscribed = true
+      unmountedRef.current = true
       if (channelRef.current) {
-        channelRef.current.unsubscribe()
+        try { channelRef.current.unsubscribe() } catch {}
+        try { supabase.removeChannel(channelRef.current) } catch {}
         channelRef.current = null
       }
       if (chCleanup) chCleanup()
     }
   }, [roomId, router])
 
-  // Presence heartbeat → populate /live_presence map
+  // Presence heartbeat → populate /live_presence map (best-effort)
   useEffect(() => {
     if (!me.id || !isUuid(roomId)) return
     let mounted = true
@@ -264,6 +304,7 @@ export default function LiveRoomPage() {
             }`}>
               {rtStatus === 'connected' ? 'Connected' : rtStatus === 'connecting' ? 'Connecting…' : 'Connection issue'}
             </span>
+            {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
             <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Back to profile</a>
             {isHost && (
               <Menu>
@@ -456,4 +497,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
