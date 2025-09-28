@@ -124,18 +124,18 @@ export default function NewSchedulePage() {
       <PageShell className="flex-1">
         <HeaderBar />
 
-        <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
+        <div className="w-full overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 md:p-8">
           <h1 className="text-2xl font-bold">Post a new game</h1>
           <p className="text-white/60 mt-1">Fill in the details—players can discover and join.</p>
 
-          <form onSubmit={onSubmit} className="grid md:grid-cols-2 gap-4 mt-6">
+          <form onSubmit={onSubmit} className="grid md:grid-cols-2 gap-6 mt-6">
             {/* Poster upload */}
             <div className="md:col-span-2">
               <label className="grid gap-2 text-sm">
                 <span className="text-white/70">Poster image</span>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-center gap-4">
-                    <div className="h-28 w-48 rounded-xl bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
+                    <div className="h-28 w-64 rounded-xl bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
                       {posterPreview ? (
                         <img src={posterPreview} alt="Preview" className="h-full w-full object-cover" />
                       ) : (
@@ -230,7 +230,7 @@ export default function NewSchedulePage() {
               </label>
             </Field>
 
-            {/* Description moved here: between 18+ and the buttons */}
+            {/* Description: between 18+ and the buttons */}
             <div className="md:col-span-2">
               <label className="grid gap-2 text-sm">
                 <span className="text-white/70">Description</span>
@@ -246,7 +246,7 @@ export default function NewSchedulePage() {
 
             {errorMsg && <div className="md:col-span-2 text-sm text-red-400">{errorMsg}</div>}
 
-            <div className="md:col-span-2 flex items-center gap-2">
+            <div className="md:col-span-2 flex items-center gap-3">
               <button
                 disabled={saving}
                 className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
@@ -260,8 +260,8 @@ export default function NewSchedulePage() {
       </PageShell>
 
       {/* Pinned footer */}
-      <footer className="border-t border-white/10 px-4">
-        <div className="max-w-7xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className="border-t border-white/10 px-6">
+        <div className="max-w-screen-2xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© 2025 ttrplobby</div>
           <nav className="flex items-center gap-4">
             <a href="/terms" className="hover:text-white">Terms</a>
@@ -277,23 +277,25 @@ export default function NewSchedulePage() {
 /* ------------------------------ layout helpers ----------------------------- */
 
 function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`max-w-7xl mx-auto px-6 py-8 ${className}`}>{children}</div>
+  return <div className={`max-w-screen-2xl mx-auto px-8 py-10 ${className}`}>{children}</div>
 }
 
 function HeaderBar() {
   return (
-    <div className="mb-6 flex items-center justify-between gap-6 w-full">
-      <a
-        href="/profile"
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
-      >
-        Profile
-      </a>
+    <div className="mb-6 flex items-center justify-between gap-8 w-full">
+      {/* ttrplobby on the left */}
       <a
         href="/"
         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
       >
         <LogoIcon /><span className="font-semibold">ttrplobby</span>
+      </a>
+      {/* Profile on the right */}
+      <a
+        href="/profile"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:border-white/30 transition"
+      >
+        Profile
       </a>
     </div>
   )
@@ -322,4 +324,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
