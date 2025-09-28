@@ -84,22 +84,20 @@ export default function Client() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col text-white">
-      {/* Top buttons */}
-      <div className="px-4 pt-4 flex justify-end gap-2">
-        <a
-          href="/"
-          className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
-        >
-          ttrplobby
-        </a>
-        <a
-          href="/profile"
-          className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
-        >
-          Profile
-        </a>
-      </div>
+    <div className="relative min-h-screen flex flex-col text-white">
+      {/* Halfway-from-center buttons */}
+      <a
+        href="/"
+        className="absolute left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
+      >
+        ttrplobby
+      </a>
+      <a
+        href="/profile"
+        className="absolute left-3/4 top-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
+      >
+        Profile
+      </a>
 
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center p-6">
