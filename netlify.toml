@@ -6,11 +6,10 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Force canonical host: redirect apex -> www (preserve path/query)
+# Canonicalize host: force apex -> www (preserve path/query)
 [[redirects]]
   from = "/*"
   to = "https://www.ttrplobby.com/:splat"
   status = 301
   force = true
   conditions = { Host = ["ttrplobby.com"] }
-
