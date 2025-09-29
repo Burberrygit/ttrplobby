@@ -1,28 +1,31 @@
+// File: frontend/src/app/api/live/quick-join/route.ts
 // API: POST /api/live/quick-join
-// Body may include: { system, newPlayerFriendly, adult, lengthMinutes, toleranceMinutes, widen, ignoreFlags }
-// The user must send an Authorization: Bearer <access_token> header (set by the client in /live/search).
+// Body may include: { system, newPlayerFriendly, newbie, npf, adult, length, lengthMinutes, toleranceMinutes, widen, ignoreFlags }
+// The client should send Authorization: Bearer <access_token>
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Ensure these are set in your Netlify env:
-// NEXT_PUBLIC_SUPABASE_URL
-// NEXT_PUBLIC_SUPABASE_ANON_KEY
+// Env (set in Netlify and GH Actions secrets)
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 
-// Adjust to your schema
+// Tables / columns
 const GAMES_TABLE = 'live_games'
 const PLAYERS_TABLE = 'live_game_players'
+const COL_NEWBIE = 'new_player_friendly'
+const COL_ADULT  = 'is_18_plus'          // <-- matches your schema
+const COL_LEN    = 'length_minutes'
 
 export async function POST(req: Request) {
-  // Expect Authorization header with a Supabase access token
+  // Require Bearer
   const authHeader = req.headers.get('authorization') || ''
   const hasBearer = /^Bearer\s+/i.test(authHeader)
   if (!hasBearer) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    return NextResponse.json({ step: 'auth', error: 'Not authenticated' }, { status: 401 })
   }
 
+  // Supabase client which forwards the Bearer to respect RLS
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, detectSessionInUrl: false },
     global: { headers: { Authorization: authHeader } },
@@ -31,61 +34,72 @@ export async function POST(req: Request) {
   // Confirm user
   const { data: userData, error: authErr } = await supabase.auth.getUser()
   if (authErr || !userData?.user) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    return NextResponse.json({ step: 'auth', error: authErr?.message || 'Not authenticated' }, { status: 401 })
   }
   const user = userData.user
 
-  const body = await req.json().catch(() => ({}))
-  const system = (body.system ?? 'dnd5e') as string
-  const newPlayerFriendly = Boolean(body.newPlayerFriendly)
-  const adult = Boolean(body.adult)
-  const lengthMinutes = Number(body.lengthMinutes ?? 120)
+  const body = await req.json().catch(() => ({} as any))
 
-  const tolerance = Number(body.toleranceMinutes ?? 0)
-  const widen = Boolean(body.widen ?? false) // retained for compatibility; not used separately
+  // Accept multiple parameter names from different callers
+  const system = (body.system ?? null) as string | null
+  const newPlayerFriendly =
+    typeof body.newPlayerFriendly === 'boolean' ? body.newPlayerFriendly
+    : typeof body.newbie === 'boolean' ? body.newbie
+    : typeof body.npf === 'boolean' ? body.npf
+    : null
+
+  const adult =
+    typeof body.adult === 'boolean' ? body.adult : null
+
+  const lengthMinutes =
+    Number.isFinite(+body.length) ? Number(body.length)
+    : Number.isFinite(+body.lengthMinutes) ? Number(body.lengthMinutes)
+    : null
+
+  const tolerance = Number.isFinite(+body.toleranceMinutes) ? Number(body.toleranceMinutes) : 0
   const ignoreFlags = Boolean(body.ignoreFlags ?? false)
 
-  const minLen = Math.max(15, lengthMinutes - tolerance)
-  const maxLen = lengthMinutes + tolerance
+  const minLen = lengthMinutes == null ? null : Math.max(15, lengthMinutes - tolerance)
+  const maxLen = lengthMinutes == null ? null : lengthMinutes + tolerance
 
-  // Base query
+  // Build the query
   let query = supabase
     .from(GAMES_TABLE)
-    .select('id, system, new_player_friendly, adult, length_minutes, status, max_players, created_at')
+    .select(`id, system, ${COL_NEWBIE}, ${COL_ADULT}, ${COL_LEN}, status, max_players, created_at`)
     .eq('status', 'open')
-    .eq('system', system)
-    .gte('length_minutes', minLen)
-    .lte('length_minutes', maxLen)
     .order('created_at', { ascending: true })
     .limit(1)
 
+  if (system) query = query.eq('system', system)
+  if (minLen != null) query = query.gte(COL_LEN, minLen)
+  if (maxLen != null) query = query.lte(COL_LEN, maxLen)
   if (!ignoreFlags) {
-    query = query.eq('new_player_friendly', newPlayerFriendly).eq('adult', adult)
+    if (newPlayerFriendly != null) query = query.eq(COL_NEWBIE, newPlayerFriendly)
+    if (adult != null)            query = query.eq(COL_ADULT, adult)
   }
 
   const { data: games, error: gErr } = await query
   if (gErr) {
     console.error('[quick-join] search error', gErr)
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 })
+    return NextResponse.json({ step: 'search', error: 'Search failed' }, { status: 500 })
   }
   if (!games || games.length === 0) {
-    return NextResponse.json({ error: 'No match' }, { status: 404 })
+    return NextResponse.json({ step: 'match', error: 'no_game_found' }, { status: 404 })
   }
 
   const game = games[0]
 
-  // Join or upsert player
-  const insertPayload = { game_id: game.id, user_id: user.id }
+  // Upsert membership (safe idempotent join)
   const { error: joinErr } = await supabase
     .from(PLAYERS_TABLE)
-    .upsert(insertPayload, { onConflict: 'game_id,user_id', ignoreDuplicates: false })
+    .upsert({ game_id: game.id, user_id: user.id }, { onConflict: 'game_id,user_id', ignoreDuplicates: false })
 
   if (joinErr) {
     const msg = String(joinErr.message || '').toLowerCase()
     const isUnique = msg.includes('duplicate') || msg.includes('unique') || msg.includes('conflict')
     if (!isUnique) {
       console.error('[quick-join] join error', joinErr)
-      return NextResponse.json({ error: 'Join failed' }, { status: 500 })
+      return NextResponse.json({ step: 'join', error: 'Join failed' }, { status: 500 })
     }
   }
 
