@@ -1,4 +1,7 @@
 // supabase/functions/delete-account/index.ts
+// Edge Function: hard-delete the caller's account + data.
+// Uses function secrets: PROJECT_URL, ANON_KEY, SERVICE_ROLE_KEY
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -15,12 +18,12 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
 
-    // ⬇️ use non-blocked secret names
+    // Read secrets (SUPABASE_* names are blocked in function secrets)
     const SUPABASE_URL = Deno.env.get('PROJECT_URL')!
     const SUPABASE_ANON_KEY = Deno.env.get('ANON_KEY')!
     const SERVICE_KEY = Deno.env.get('SERVICE_ROLE_KEY')!
 
-    // Verify caller
+    // Verify caller (user client with the caller's JWT)
     const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     })
@@ -28,7 +31,7 @@ Deno.serve(async (req) => {
     if (authErr || !user) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
     const uid = user.id
 
-    // Admin client
+    // Admin client (service role)
     const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY)
 
     // 1) End any live rooms the user hosts
@@ -73,4 +76,3 @@ Deno.serve(async (req) => {
     return new Response(e?.message || 'Internal error', { status: 500, headers: corsHeaders })
   }
 })
-
