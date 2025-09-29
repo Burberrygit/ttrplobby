@@ -4,33 +4,32 @@ import { createServerClient } from '@supabase/ssr'
 
 export const dynamic = 'force-dynamic'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-function supa() {
+function getClient(req: Request) {
   const jar = cookies()
-  return createServerClient(url!, key!, {
+  const authHeader = req.headers.get('authorization')
+  const accessToken =
+    authHeader && authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7)
+      : null
+
+  return createServerClient(url, key, {
     cookies: {
-      getAll() {
-        return jar.getAll()
-      },
+      getAll() { return jar.getAll() },
       setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => jar.set(name, value, options))
-        } catch {
-          // ignore if not allowed to set in this context
-        }
+        try { cookiesToSet.forEach(({ name, value, options }) => jar.set(name, value, options)) } catch {}
       }
-    }
+    },
+    // If a bearer token was provided, forward it to Supabase
+    global: accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined
   })
 }
 
 export async function POST(req: Request) {
   if (!url || !key) {
-    return NextResponse.json(
-      { step: 'env', error: 'missing_supabase_env', haveUrl: !!url, haveKey: !!key },
-      { status: 500 }
-    )
+    return NextResponse.json({ step: 'env', error: 'missing_supabase_env' }, { status: 500 })
   }
 
   const body = await req.json().catch(() => ({}))
@@ -40,7 +39,7 @@ export async function POST(req: Request) {
   const length = Number.isFinite(+body?.length) ? Number(body.length) : null
 
   try {
-    const sb = supa()
+    const sb = getClient(req)
     const { data: { user }, error: authErr } = await sb.auth.getUser()
     if (authErr || !user) {
       return NextResponse.json({ step: 'auth', error: authErr?.message || 'unauthenticated' }, { status: 401 })
@@ -58,8 +57,8 @@ export async function POST(req: Request) {
     if (!gameId) return NextResponse.json({ step: 'match', error: 'no_game_found' }, { status: 404 })
     return NextResponse.json({ gameId })
   } catch (e: any) {
-    console.error('join route error:', e)
     return NextResponse.json({ step: 'server', error: String(e?.message || e) }, { status: 500 })
   }
 }
+
 
