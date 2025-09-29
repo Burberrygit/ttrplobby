@@ -3,6 +3,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 const SYSTEMS = [
   'D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder',
@@ -10,23 +11,59 @@ const SYSTEMS = [
   'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
 ];
 
+// Canonical lengths (minutes) -> shown as hours in UI
+const LENGTHS_MINUTES = [60, 90, 120, 180] as const;
+
 export default function QuickJoinPage() {
   const router = useRouter();
   const [system, setSystem] = useState('D&D 5e (2014)');
   const [newbie, setNewbie] = useState(true);
   const [adult, setAdult] = useState(false);
-  const [lengthHours, setLengthHours] = useState<number>(2); // hours instead of minutes
+  const [lengthMinutes, setLengthMinutes] = useState<number>(120);
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const minutes = Math.max(30, Math.round(Number(lengthHours) * 60)); // convert hours → minutes for search API
-    const params = new URLSearchParams({
-      system,
-      npf: String(newbie),
-      adult: String(adult),
-      length: String(minutes),
+
+    // Ensure user is signed in and attach bearer
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      router.push(`/login?next=${encodeURIComponent('/live/quick-join')}`);
+      return;
+    }
+
+    const res = await fetch('/api/live/quick-join', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        system,
+        npf: newbie,
+        adult,
+        length: lengthMinutes, // exact minutes, matches /live/new defaults
+      }),
     });
-    router.push(`/live/search?${params.toString()}`);
+
+    const json = await res.json().catch(() => null as any);
+
+    if (!res.ok) {
+      if (json?.step === 'match' && json?.error === 'no_game_found') {
+        alert('No open table matches those filters yet. Try a different length or system.');
+      } else if (json?.step === 'auth') {
+        alert('Please sign in to join a game.');
+      } else {
+        console.error('Quick-join error:', json);
+        alert('Could not join a game. Please try again.');
+      }
+      return;
+    }
+
+    if (json?.gameId) {
+      router.push(`/live/${json.gameId}`);
+    } else {
+      alert('Joined, but no game id returned.');
+    }
   }
 
   return (
@@ -59,7 +96,7 @@ export default function QuickJoinPage() {
               <li>• <span className="text-white/90">System</span>: exact match</li>
               <li>• <span className="text-white/90">New-player friendly</span>: respected when possible</li>
               <li>• <span className="text-white/90">18+ content</span>: respected when possible</li>
-              <li>• <span className="text-white/90">Length</span>: we may widen by ±15–60 min</li>
+              <li>• <span className="text-white/90">Length</span>: exact canonical values (1.0, 1.5, 2.0, 3.0 hours)</li>
             </ul>
             <div className="mt-3 text-xs text-white/50">
               If nothing matches, you can tweak filters or start a new live game.
@@ -81,15 +118,18 @@ export default function QuickJoinPage() {
               </label>
 
               <label className="text-sm">
-                <div className="mb-1 text-white/70">Length (hours)</div>
-                <input
-                  type="number"
-                  min={0.5}
-                  step={0.5}
-                  value={lengthHours}
-                  onChange={(e) => setLengthHours(Math.max(0.5, Number(e.target.value || 0)))}
+                <div className="mb-1 text-white/70">Length (Hours)</div>
+                <select
+                  value={String(lengthMinutes)}
+                  onChange={(e) => setLengthMinutes(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-                />
+                >
+                  {LENGTHS_MINUTES.map(m => (
+                    <option key={m} value={m}>
+                      {(m/60).toFixed(m % 60 === 0 ? 0 : 1)}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <div className="text-sm md:col-span-2 flex items-center gap-6 mt-1">
@@ -163,5 +203,3 @@ function LogoIcon() {
     </svg>
   );
 }
-
-
