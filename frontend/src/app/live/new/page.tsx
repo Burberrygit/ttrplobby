@@ -1,4 +1,3 @@
-// File: frontend/src/app/live/new/page.tsx
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -134,37 +133,44 @@ export default function LiveHostSetup() {
     void discordUrl; void gameUrl;
 
     try {
-      // 👉 Write to live_games so quick-join can find it (tight, exact values)
-      const { data, error } = await supabase
-        .from('live_games')
-        .insert({
-          host_id: userId,
-          status: 'open',
-          system: form.system,
-          new_player_friendly: form.welcomes_new,
-          is_18_plus: form.is_mature,
-          length_minutes: form.length_min,
-          max_players: Math.max(1, Math.min(10, form.seats)),
-          is_private: false, // quick-join only matches public games
-        })
-        .select('id')
-        .single()
-
-      if (error) {
-        console.warn('live_games insert error:', error.message)
-        setErrorMsg(error.message || 'Could not start lobby.')
+      // Use server-only create endpoint with bearer token (service role will insert)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        router.replace(`/login?next=${encodeURIComponent('/live/new')}`)
         return
       }
 
-      // Navigate to the live game page
-      const gameId = data?.id as string | undefined
+      const res = await fetch('/api/live/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          system: form.system,
+          length_minutes: form.length_min,
+          new_player_friendly: form.welcomes_new,
+          is_18_plus: form.is_mature,
+          max_players: Math.max(1, Math.min(10, form.seats)),
+          is_private: false, // quick-join only matches public games
+        }),
+      })
+
+      const json = await res.json().catch(() => ({} as any))
+      if (!res.ok) {
+        console.warn('create lobby error:', json?.error || res.status)
+        setErrorMsg(json?.error || `Could not start lobby (HTTP ${res.status})`)
+        return
+      }
+
+      const gameId = json?.gameId as string | undefined
       if (gameId) {
         router.push(`/live/${gameId}?host=1`)
       } else {
         setErrorMsg('Lobby created but no id returned.')
       }
     } catch (e: any) {
-      console.warn('live_games insert failed:', e?.message)
+      console.warn('create lobby failed:', e?.message)
       setErrorMsg(e?.message || 'Failed to create lobby.')
     } finally {
       setSubmitting(false)
