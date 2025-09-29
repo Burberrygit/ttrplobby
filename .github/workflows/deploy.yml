@@ -1,10 +1,14 @@
 # .github/workflows/deploy.yml
-name: Build & Deploy to Netlify (Plugin Build, cached)
+name: Build & Deploy to Netlify (pnpm)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+concurrency:
+  group: netlify-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -18,71 +22,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node (use npm cache)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+          run_install: false
+
+      - name: Setup Node (cache pnpm)
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Restore Next.js cache
-        uses: actions/cache@v4
-        with:
-          path: frontend/.next/cache
-          key: next-cache-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ github.ref_name }}
-          restore-keys: |
-            next-cache-${{ runner.os }}-${{ github.ref_name }}-
-            next-cache-${{ runner.os }}-
+      - name: Install deps (frontend)
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
 
-      - name: Restore Netlify cache
-        uses: actions/cache@v4
-        with:
-          path: frontend/.netlify/cache
-          key: netlify-cache-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ github.ref_name }}
-          restore-keys: |
-            netlify-cache-${{ runner.os }}-${{ github.ref_name }}-
-            netlify-cache-${{ runner.os }}-
-
-      - name: Install deps
+      # Optional: quick sanity prints (helpful when debugging)
+      - name: Print dirs
         working-directory: frontend
         run: |
           set -euxo pipefail
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          node -v
+          pnpm -v
+          echo "lockfile:" && ls -la pnpm-lock.yaml
+          echo "netlify.toml:" && (cat netlify.toml || true)
 
-      - name: Ensure Netlify CLI + bootstrap helper
-        working-directory: frontend
-        run: |
-          set -euxo pipefail
-          npm i -D netlify-cli@^17 @netlify/edge-functions-bootstrap@latest @netlify/plugin-nextjs@latest
-
-      # ✅ Link this repo to your Netlify site (writes frontend/.netlify/state.json)
-      - name: Link Netlify site
-        working-directory: frontend
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ env.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID:    ${{ env.NETLIFY_SITE_ID }}
-        run: |
-          set -euxo pipefail
-          npx netlify link --id "$NETLIFY_SITE_ID"
-
-      # ✅ Build WITHOUT --site (build doesn’t accept it)
-      - name: Netlify Build (with @netlify/plugin-nextjs)
-        working-directory: frontend
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ env.NETLIFY_AUTH_TOKEN }}
-        run: |
-          set -euxo pipefail
-          npx netlify build --context production --debug
-
-      - name: Show build results
-        run: |
-          set -euxo pipefail
-          echo "frontend/.next:" && ls -la frontend/.next || true
-          echo "frontend/.netlify:" && ls -la frontend/.netlify || true
-          echo "frontend/.netlify/functions:" && ls -la frontend/.netlify/functions || true
-          echo "frontend/.netlify/cache:" && ls -la frontend/.netlify/cache || true
-
-      # You can keep --site here (deploy supports it), or omit since we're linked
+      # Use pnpm dlx so we don't rely on npm
       - name: Deploy to Netlify (prod)
         working-directory: frontend
         env:
@@ -90,4 +57,8 @@ jobs:
           NETLIFY_SITE_ID:    ${{ env.NETLIFY_SITE_ID }}
         run: |
           set -euxo pipefail
-          npx netlify deploy --prod --build --auth "$NETLIFY_AUTH_TOKEN" --site "$NETLIFY_SITE_ID" --debug
+          pnpm dlx netlify-cli --version
+          pnpm dlx netlify-cli deploy --prod --build \
+            --auth "$NETLIFY_AUTH_TOKEN" \
+            --site "$NETLIFY_SITE_ID" \
+            --debug
