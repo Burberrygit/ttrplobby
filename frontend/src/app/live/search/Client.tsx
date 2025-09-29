@@ -1,4 +1,3 @@
-// File: frontend/src/app/live/search/Client.tsx
 'use client';
 
 import Image from 'next/image';
@@ -44,16 +43,14 @@ export default function Client() {
     }
 
     async function loop() {
-      const base = {
-        system: q.get('system') ?? 'dnd5e',
-        newPlayerFriendly: (q.get('npf') ?? 'true') === 'true',
-        adult: (q.get('adult') ?? 'false') === 'true',
-        lengthMinutes: Number(q.get('length') ?? '120'),
-      };
+      const system = q.get('system') ?? '';
+      const npf = (q.get('npf') ?? 'true') === 'true';
+      const adult = (q.get('adult') ?? 'false') === 'true';
+      const length = Number(q.get('length') ?? '120');
 
-      // initial strict search
+      // initial strict search (no tolerance)
       {
-        const r = await callApi({ ...base, widen: false });
+        const r = await callApi({ system, npf, adult, length });
         if (r.ok) return;
         if (r.status === 401) { setStatus('failed'); return; } // not logged in
       }
@@ -62,16 +59,16 @@ export default function Client() {
 
       // progressively widen length tolerance
       const tolerances = [15, 30, 45, 60];
-      for (const tol of tolerances) {
+      for (const toleranceMinutes of tolerances) {
         if (Date.now() > stopAt.current) break;
-        const r = await callApi({ ...base, toleranceMinutes: tol, widen: true });
+        const r = await callApi({ system, npf, adult, length, toleranceMinutes });
         if (r.ok) return;
         await new Promise(r => setTimeout(r, 1500));
       }
 
-      // final pass: ignore newbie/adult flags but keep system
+      // final pass: ignore newbie/adult flags but keep system + tolerant length
       if (Date.now() <= stopAt.current) {
-        const r = await callApi({ ...base, ignoreFlags: true, widen: true });
+        const r = await callApi({ system, length, toleranceMinutes: 60 });
         if (r.ok) return;
       }
 
@@ -148,4 +145,3 @@ export default function Client() {
     </div>
   );
 }
-
