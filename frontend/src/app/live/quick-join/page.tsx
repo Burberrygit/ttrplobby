@@ -1,9 +1,7 @@
-// File: frontend/src/app/live/quick-join/page.tsx
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 
 const SYSTEMS = [
   'D&D 5e (2014)','D&D 2024','Pathfinder 2e','Pathfinder 1e','Call of Cthulhu','Starfinder',
@@ -21,49 +19,16 @@ export default function QuickJoinPage() {
   const [adult, setAdult] = useState(false);
   const [lengthMinutes, setLengthMinutes] = useState<number>(120);
 
-  async function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    // Ensure user is signed in and attach bearer
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      router.push(`/login?next=${encodeURIComponent('/live/quick-join')}`);
-      return;
-    }
-
-    const res = await fetch('/api/live/quick-join', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        system,
-        npf: newbie,
-        adult,
-        length: lengthMinutes, // exact minutes, matches /live/new defaults
-      }),
+    // 🚦 Don’t call any API here. Just navigate to /live/search with filters.
+    const qs = new URLSearchParams({
+      system: system,
+      npf: String(newbie),
+      adult: String(adult),
+      length: String(lengthMinutes),
     });
-
-    const json = await res.json().catch(() => null as any);
-
-    if (!res.ok) {
-      if (json?.step === 'match' && json?.error === 'no_game_found') {
-        alert('No open table matches those filters yet. Try a different length or system.');
-      } else if (json?.step === 'auth') {
-        alert('Please sign in to join a game.');
-      } else {
-        console.error('Quick-join error:', json);
-        alert('Could not join a game. Please try again.');
-      }
-      return;
-    }
-
-    if (json?.gameId) {
-      router.push(`/live/${json.gameId}`);
-    } else {
-      alert('Joined, but no game id returned.');
-    }
+    router.push(`/live/search?${qs.toString()}`);
   }
 
   return (
@@ -75,7 +40,7 @@ export default function QuickJoinPage() {
           <div>
             <h1 className="text-2xl font-bold">Quick join a live game</h1>
             <p className="text-white/70 mt-1">
-              Pick your preferences and we’ll drop you into the first open table that matches.
+              Pick your preferences. We’ll search open tables on the next screen.
             </p>
           </div>
           <div className="flex gap-2">
@@ -96,7 +61,7 @@ export default function QuickJoinPage() {
               <li>• <span className="text-white/90">System</span>: exact match</li>
               <li>• <span className="text-white/90">New-player friendly</span>: respected when possible</li>
               <li>• <span className="text-white/90">18+ content</span>: respected when possible</li>
-              <li>• <span className="text-white/90">Length</span>: exact canonical values (1.0, 1.5, 2.0, 3.0 hours)</li>
+              <li>• <span className="text-white/90">Length</span>: canonical values (1.0, 1.5, 2.0, 3.0 hours)</li>
             </ul>
             <div className="mt-3 text-xs text-white/50">
               If nothing matches, you can tweak filters or start a new live game.
