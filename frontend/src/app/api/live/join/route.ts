@@ -1,7 +1,7 @@
 // frontend/src/app/api/live/join/route.ts
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -10,9 +10,18 @@ function supa() {
   const jar = cookies()
   return createServerClient(url, key, {
     cookies: {
-      get: (name: string) => jar.get(name)?.value,
-      set: (name: string, value: string, options: CookieOptions) => jar.set({ name, value, ...options }),
-      remove: (name: string, options: CookieOptions) => jar.set({ name, value: '', ...options })
+      getAll() {
+        return jar.getAll()
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            jar.set(name, value, options)
+          })
+        } catch {
+          // If called from a Server Component context, setting may be disallowed—ignore.
+        }
+      }
     }
   })
 }
@@ -38,7 +47,7 @@ export async function POST(req: Request) {
     p_discoverable_only: true
   })
 
-  if (error)   return NextResponse.json({ step: 'rpc', error: error.message }, { status: 400 })
+  if (error)   return NextResponse.json({ step: 'rpc',   error: error.message }, { status: 400 })
   if (!gameId) return NextResponse.json({ step: 'match', error: 'no_game_found' }, { status: 404 })
   return NextResponse.json({ gameId })
 }
