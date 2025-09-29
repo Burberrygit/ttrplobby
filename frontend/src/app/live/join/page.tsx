@@ -43,6 +43,21 @@ export default function LiveJoin() {
   const [joining, setJoining] = useState(false)
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null)
 
+  // 🔄 One-time cookie sync so server routes see the session (Bearer → SSR cookies)
+  useEffect(() => {
+    ;(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        try {
+          await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+        } catch { /* non-fatal */ }
+      }
+    })()
+  }, [])
+
   const filtered = useMemo(() => {
     let list = rooms
     if (system !== 'Any') list = list.filter(r => (r.system || '') === system)
@@ -91,7 +106,7 @@ export default function LiveJoin() {
     setErrorMsg(null)
     setJoining(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session} } = await supabase.auth.getSession()
       const res = await fetch('/api/live/join', {
         method: 'POST',
         headers: {
@@ -266,4 +281,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
