@@ -43,10 +43,17 @@ export default function LiveJoin() {
   const [joining, setJoining] = useState(false)
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null)
 
-  // 🔄 One-time cookie sync so server routes see the session (send access+refresh)
+  // 🔄 One-time cookie sync so server routes see the session (send access+refresh, refresh if needed)
   useEffect(() => {
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      let { data: { session } } = await supabase.auth.getSession()
+
+      // Some environments don't surface refresh_token on first getSession; refresh once to obtain it
+      if (session && !session.refresh_token) {
+        const r = await supabase.auth.refreshSession()
+        if (r.data?.session) session = r.data.session
+      }
+
       if (session?.access_token && session?.refresh_token) {
         try {
           await fetch('/api/auth/sync', {
