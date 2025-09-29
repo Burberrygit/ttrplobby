@@ -43,15 +43,19 @@ export default function LiveJoin() {
   const [joining, setJoining] = useState(false)
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null)
 
-  // 🔄 One-time cookie sync so server routes see the session (Bearer → SSR cookies)
+  // 🔄 One-time cookie sync so server routes see the session (send access+refresh)
   useEffect(() => {
     ;(async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session?.access_token) {
+      if (session?.access_token && session?.refresh_token) {
         try {
           await fetch('/api/auth/sync', {
             method: 'POST',
-            headers: { Authorization: `Bearer ${session.access_token}` },
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            }),
           })
         } catch { /* non-fatal */ }
       }
@@ -281,5 +285,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
