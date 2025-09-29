@@ -44,8 +44,8 @@ export default function LiveHostSetup() {
     title: '',
     system: 'D&D 5e (2014)',
     vibe: '',
-    seats: 5,
-    length_min: 120,
+    seats: 6,            // aligns with live_games.max_players default we use below
+    length_min: 120,     // exact minutes used by quick-join
     welcomes_new: true,
     is_mature: false,
     discord_url: '',
@@ -127,37 +127,47 @@ export default function LiveHostSetup() {
     if (!userId) return
     setSubmitting(true)
     setErrorMsg(null)
-    const roomId = crypto.randomUUID()
 
-    // Normalize links before saving
+    // Normalize links before saving (not stored in live_games, but kept for future)
     const discordUrl = normalizeExternalUrl(form.discord_url || undefined)
     const gameUrl = normalizeExternalUrl(form.game_url || undefined)
+    void discordUrl; void gameUrl;
 
     try {
-      const { error } = await supabase.from('live_rooms').upsert({
-        id: roomId,
-        host_id: userId,
-        title: form.title || 'Untitled live game',
-        system: form.system,
-        vibe: form.vibe || null,
-        seats: form.seats,
-        length_min: form.length_min,
-        welcomes_new: form.welcomes_new,
-        is_mature: form.is_mature,
-        discord_url: discordUrl,
-        game_url: gameUrl,
-        poster_url: form.poster_url || null,
-        poster_storage_path: form.poster_storage_path || null,
-        status: 'open'
-      }, { onConflict: 'id' })
+      // 👉 Write to live_games so quick-join can find it (tight, exact values)
+      const { data, error } = await supabase
+        .from('live_games')
+        .insert({
+          host_id: userId,
+          status: 'open',
+          system: form.system,
+          new_player_friendly: form.welcomes_new,
+          is_18_plus: form.is_mature,
+          length_minutes: form.length_min,
+          max_players: Math.max(1, Math.min(10, form.seats)),
+          is_private: false, // quick-join only matches public games
+        })
+        .select('id')
+        .single()
+
       if (error) {
-        console.warn('live_rooms upsert error:', error.message)
+        console.warn('live_games insert error:', error.message)
+        setErrorMsg(error.message || 'Could not start lobby.')
+        return
+      }
+
+      // Navigate to the live game page
+      const gameId = data?.id as string | undefined
+      if (gameId) {
+        router.push(`/live/${gameId}?host=1`)
+      } else {
+        setErrorMsg('Lobby created but no id returned.')
       }
     } catch (e: any) {
-      console.warn('live_rooms upsert failed:', e?.message)
+      console.warn('live_games insert failed:', e?.message)
+      setErrorMsg(e?.message || 'Failed to create lobby.')
     } finally {
       setSubmitting(false)
-      router.push(`/live/${roomId}?host=1`)
     }
   }
 
@@ -247,15 +257,17 @@ export default function LiveHostSetup() {
                 </label>
                 <label className="text-sm">
                   <div className="mb-1 text-white/70">Length (Hours)</div>
-                  <input
-                    type="number" min={0.5} step={0.25}
-                    value={(form.length_min / 60).toString()}
-                    onChange={(e) => {
-                      const hours = Math.max(0.25, Number(e.target.value || 0))
-                      onChange('length_min', Math.round(hours * 60))
-                    }}
+                  <select
+                    value={(form.length_min).toString()}
+                    onChange={(e) => onChange('length_min', Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-                  />
+                  >
+                    {/* enforce canonical lengths */}
+                    <option value={60}>1.0</option>
+                    <option value={90}>1.5</option>
+                    <option value={120}>2.0</option>
+                    <option value={180}>3.0</option>
+                  </select>
                 </label>
 
                 <div className="text-sm flex items-center gap-3">
