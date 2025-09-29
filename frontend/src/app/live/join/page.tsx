@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 type LiveRoom = {
@@ -28,6 +29,8 @@ const SYSTEMS = ['Any',
 ]
 
 export default function LiveJoin() {
+  const router = useRouter()
+
   const [system, setSystem] = useState('Any')
   const [welcomesNew, setWelcomesNew] = useState(false)
   const [mature, setMature] = useState(false)
@@ -35,6 +38,10 @@ export default function LiveJoin() {
   const [count, setCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // join UX state
+  const [joining, setJoining] = useState(false)
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     let list = rooms
@@ -75,6 +82,61 @@ export default function LiveJoin() {
     })()
   }, [])
 
+  async function joinWithFilters(opts: {
+    system: string | null
+    newbie: boolean | null
+    adult: boolean | null
+    length: number | null
+  }) {
+    setErrorMsg(null)
+    setJoining(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/live/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          system: opts.system,
+          newbie: opts.newbie,
+          adult: opts.adult,
+          length: opts.length,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(json?.error || 'Unable to join a live game')
+      }
+      router.push(`/live/${json.gameId}`)
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Unable to join a live game')
+    } finally {
+      setJoining(false)
+      setJoiningRoomId(null)
+    }
+  }
+
+  async function quickJoin() {
+    await joinWithFilters({
+      system: system === 'Any' ? null : system,
+      newbie: welcomesNew ? true : null,
+      adult: mature ? true : null,
+      length: null, // no length filter from this page; matcher will use defaults
+    })
+  }
+
+  async function joinSpecificRoom(r: LiveRoom) {
+    setJoiningRoomId(r.id)
+    await joinWithFilters({
+      system: r.system ?? null,
+      newbie: r.welcomes_new ?? null,
+      adult: r.is_mature ?? null,
+      length: r.length_min ?? null,
+    })
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 text-white">
       <TopBanner />
@@ -83,7 +145,7 @@ export default function LiveJoin() {
         <h1 className="text-2xl font-bold">Join a live game</h1>
         <div className="text-white/70">Total Live Games ({count})</div>
       </div>
-      <p className="text-white/70 mt-1">Pick your preferences, then select a lobby to jump in.</p>
+      <p className="text-white/70 mt-1">Pick your preferences, then click <em>Find me a table</em> or join a specific lobby.</p>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -108,8 +170,20 @@ export default function LiveJoin() {
           <button
             onClick={() => { setSystem('Any'); setWelcomesNew(false); setMature(false) }}
             className="px-3 py-2 rounded-xl border border-white/20 hover:border-white/40 text-sm"
+            type="button"
           >
             Reset
+          </button>
+
+          <div className="ml-auto" />
+
+          <button
+            type="button"
+            onClick={quickJoin}
+            disabled={joining}
+            className="px-3 py-2 rounded-xl bg-[#29e0e3] hover:bg-[#22c8cb] text-black font-medium disabled:opacity-60"
+          >
+            {joining ? 'Finding a table…' : 'Find me a table'}
           </button>
         </div>
       </div>
@@ -123,14 +197,21 @@ export default function LiveJoin() {
         ) : filtered.length === 0 ? (
           <div className="text-white/70 text-sm">No live games match your filters.</div>
         ) : (
-          filtered.map((r) => <RoomCard key={r.id} r={r} />)
+          filtered.map((r) => (
+            <RoomCard
+              key={r.id}
+              r={r}
+              onJoin={() => joinSpecificRoom(r)}
+              joining={joining && joiningRoomId === r.id}
+            />
+          ))
         )}
       </div>
     </div>
   )
 }
 
-function RoomCard({ r }: { r: LiveRoom }) {
+function RoomCard({ r, onJoin, joining }: { r: LiveRoom, onJoin: () => void, joining: boolean }) {
   const remain = useMemo(() => {
     // We don’t have live counts here; treat seats as “capacity” for now.
     return r.seats ?? 0
@@ -154,7 +235,14 @@ function RoomCard({ r }: { r: LiveRoom }) {
           {r.system || 'TTRPG'} {r.vibe ? `• ${r.vibe}` : ''}
         </div>
         <div className="mt-2">
-          <a href={`/live/${r.id}`} className="inline-block px-3 py-1.5 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] text-sm">Join</a>
+          <button
+            type="button"
+            onClick={onJoin}
+            disabled={joining}
+            className="inline-block px-3 py-1.5 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] text-sm text-black font-medium disabled:opacity-60"
+          >
+            {joining ? 'Joining…' : 'Join'}
+          </button>
         </div>
       </div>
     </div>
@@ -178,3 +266,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
