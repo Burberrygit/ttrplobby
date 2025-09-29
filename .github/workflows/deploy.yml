@@ -15,8 +15,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # Netlify deploy credentials (set these in GitHub → Settings → Secrets and variables → Actions)
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID:    ${{ secrets.NETLIFY_SITE_ID }}
+      # Frontend runtime/build env (also set these as GitHub Action secrets)
+      NEXT_PUBLIC_SUPABASE_URL:      ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
     steps:
       - name: Checkout
@@ -49,12 +53,14 @@ jobs:
           echo "netlify.toml:" && (cat netlify.toml || true)
           echo ".next exists before build?"; ls -la .next || true
 
-      # Deploy with explicit 'netlify' binary to avoid pnpm dlx multiple-bins issue
+      # Use explicit 'netlify' binary to avoid pnpm dlx multiple-bins error
       - name: Deploy to Netlify (prod)
         working-directory: frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ env.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID:    ${{ env.NETLIFY_SITE_ID }}
+          NEXT_PUBLIC_SUPABASE_URL:      ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           set -euxo pipefail
           pnpm dlx --package=netlify-cli netlify --version
@@ -62,4 +68,3 @@ jobs:
             --auth "$NETLIFY_AUTH_TOKEN" \
             --site "$NETLIFY_SITE_ID" \
             --debug
-
