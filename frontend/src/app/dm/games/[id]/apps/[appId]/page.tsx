@@ -81,8 +81,19 @@ export default function ApplicationDetailPage() {
     if (!app || !game) return
     setBusy(true); setErrorMsg(null)
     try {
-      // 1) Add player to game_players (best-effort; ignore unique conflicts)
-      await supabase.from('game_players').insert({ game_id: game.id, player_id: app.player_id }).select().single().catch(() => {})
+      // 1) Add player to game_players via RPC (handles player_id vs user_id, ignores duplicates)
+      await supabase.rpc('add_player_to_game', {
+        p_game_id: game.id,
+        p_player_id: app.player_id,
+      })
+      // (Optional fallback if RPC not deployed yet)
+      // .catch(async () => {
+      //   try {
+      //     await supabase.from('game_players').insert({ game_id: game.id, player_id: app.player_id })
+      //   } catch {
+      //     await supabase.from('game_players').insert({ game_id: game.id, user_id: app.player_id })
+      //   }
+      // })
 
       // 2) Update application status + decision payload
       const decision = {
