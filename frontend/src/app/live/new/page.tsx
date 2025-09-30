@@ -127,10 +127,9 @@ export default function LiveHostSetup() {
     setSubmitting(true)
     setErrorMsg(null)
 
-    // Normalize links before saving (not stored in live_games, but kept for future)
+    // Normalize links before saving
     const discordUrl = normalizeExternalUrl(form.discord_url || undefined)
     const gameUrl = normalizeExternalUrl(form.game_url || undefined)
-    void discordUrl; void gameUrl;
 
     try {
       // Use server-only create endpoint with bearer token (service role will insert)
@@ -153,6 +152,13 @@ export default function LiveHostSetup() {
           is_18_plus: form.is_mature,
           max_players: Math.max(1, Math.min(10, form.seats)),
           is_private: false, // quick-join only matches public games
+
+          // 🔽 send lobby metadata so /live/[id] can display it
+          title: form.title || null,
+          vibe: form.vibe || null,
+          discord_url: discordUrl,
+          game_url: gameUrl,
+          poster_url: form.poster_url || null,
         }),
       })
 
@@ -379,3 +385,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
