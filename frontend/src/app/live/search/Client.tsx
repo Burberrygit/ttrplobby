@@ -4,85 +4,137 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
+type Phase = 'strict' | 'widening' | 'open';
+
 export default function Client() {
   const router = useRouter();
   const q = useSearchParams();
-  const [status, setStatus] = useState<'searching'|'expanding'|'failed'>('searching');
-  const stopAt = useRef<number>(Date.now() + 60_000); // try up to 60s
+
+  const [phase, setPhase] = useState<Phase>('strict');
+  const [hint, setHint] = useState<string>('Searching with your exact filters…');
+
+  const strictUntil = useRef<number>(Date.now() + 30_000); // strict for first 30s
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    let visHandler: (() => void) | null = null;
+    cancelledRef.current = false;
+
+    // Persist the user's search filters for later (used by kick redirect, etc.)
+    try {
+      localStorage.setItem('live:lastFilters', JSON.stringify({
+        system: q.get('system') ?? '',
+        npf: (q.get('npf') ?? 'true') === 'true',
+        adult: (q.get('adult') ?? 'false') === 'true',
+        length: Number(q.get('length') ?? '120'),
+      }));
+    } catch {}
+
+    const exclude = q.get('exclude') || undefined;
 
     async function getToken(): Promise<string | null> {
-      // Dynamic import avoids running the Supabase browser client during prerender
       const { supabase } = await import('@/lib/supabaseClient');
       const { data: { session } } = await supabase.auth.getSession();
       return session?.access_token ?? null;
     }
 
-    async function callApi(body: Record<string, unknown>) {
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+    function visible(): boolean {
+      return typeof document === 'undefined' ? true : document.visibilityState === 'visible';
+    }
+
+    async function callQuickJoin(body: Record<string, unknown>) {
       const token = await getToken();
       if (!token) return { ok: false, status: 401 };
 
-      const res = await fetch('/api/live/quick-join', {
+      const res = await fetch(`/api/live/quick-join${exclude ? `?exclude=${encodeURIComponent(exclude)}` : ''}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
         credentials: 'include',
+        keepalive: true,
       });
 
       if (res.ok) {
         const { gameId } = await res.json();
-        if (!cancelled) router.replace(`/live/${gameId}`);
+        if (!cancelledRef.current) router.replace(`/live/${gameId}`);
         return { ok: true, status: 200 };
       }
       return { ok: false, status: res.status };
     }
 
-    async function loop() {
+    async function run() {
       const system = q.get('system') ?? '';
       const npf = (q.get('npf') ?? 'true') === 'true';
       const adult = (q.get('adult') ?? 'false') === 'true';
       const length = Number(q.get('length') ?? '120');
 
-      // initial strict search (no tolerance)
-      {
-        const r = await callApi({ system, npf, adult, length });
+      // ---- PHASE 1: STRICT (first 30s) ----
+      setPhase('strict');
+      setHint('Searching with your exact filters…');
+      while (!cancelledRef.current && Date.now() < strictUntil.current) {
+        if (!visible()) { setHint('Paused while in background…'); await sleep(1000); continue; }
+        const r = await callQuickJoin({ system, npf, adult, length });
         if (r.ok) return;
-        if (r.status === 401) { setStatus('failed'); return; } // not logged in
+        if (r.status === 401) { setHint('Please sign in to join games.'); return; }
+        await sleep(2000);
       }
 
-      setStatus('expanding');
-
-      // progressively widen length tolerance
-      const tolerances = [15, 30, 45, 60];
-      for (const toleranceMinutes of tolerances) {
-        if (Date.now() > stopAt.current) break;
-        const r = await callApi({ system, npf, adult, length, toleranceMinutes });
+      // ---- PHASE 2: WIDEN BY HOURS (one pass) ----
+      setPhase('widening');
+      setHint('Expanding the search window by length…');
+      const widenMinutes = [60, 120, 180, 240, 300, 360, 420, 480]; // up to 8 hours
+      for (const tol of widenMinutes) {
+        if (cancelledRef.current) return;
+        if (!visible()) { setHint('Paused while in background…'); await sleep(1000); continue; }
+        const r = await callQuickJoin({ system, npf, adult, length, toleranceMinutes: tol });
         if (r.ok) return;
-        await new Promise(r => setTimeout(r, 1500));
+        await sleep(2000);
       }
 
-      // final pass: ignore newbie/adult flags but keep system + tolerant length
-      if (Date.now() <= stopAt.current) {
-        const r = await callApi({ system, length, toleranceMinutes: 60 });
+      // ---- PHASE 3: OPEN SEARCH (ignore newbie/adult; continuous) ----
+      setPhase('open');
+      setHint('No strict match yet — searching broadly…');
+      // We'll use the widest tolerance (8h) and ignore flags; keep running forever (until page closes)
+      while (!cancelledRef.current) {
+        if (!visible()) { setHint('Paused while in background…'); await sleep(1200); continue; }
+        const r = await callQuickJoin({ system, length, toleranceMinutes: 480 });
         if (r.ok) return;
+        await sleep(3000);
       }
-
-      setStatus('failed');
     }
 
-    loop();
-    return () => { cancelled = true; };
+    run();
+
+    visHandler = () => {
+      if (document.visibilityState === 'visible') {
+        // Nudge the UI hint back to active if we were paused
+        setHint(prev =>
+          prev.includes('Paused') ? (phase === 'strict'
+            ? 'Searching with your exact filters…'
+            : phase === 'widening'
+              ? 'Expanding the search window by length…'
+              : 'No strict match yet — searching broadly…'
+          ) : prev
+        );
+      }
+    };
+    document.addEventListener('visibilitychange', visHandler);
+
+    return () => {
+      cancelledRef.current = true;
+      if (visHandler) document.removeEventListener('visibilitychange', visHandler);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div className="relative min-h-screen flex flex-col text-white">
-      {/* Halfway-from-center buttons, moved to top */}
+      {/* Top buttons */}
       <a
         href="/"
         className="absolute left-1/4 top-6 -translate-x-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
@@ -112,21 +164,17 @@ export default function Client() {
             We are searching for a game…
           </h1>
           <p className="text-sm text-white/80 max-w-prose">
-            Please stay on this page until you are connected.
+            Please keep this tab open; we&apos;ll connect you automatically when a seat opens.
           </p>
 
-          {/* Optional subtle status line */}
+          {/* Live status line */}
           <p className="text-xs text-white/60">
-            {status === 'searching'
-              ? 'Searching with your exact filters.'
-              : status === 'expanding'
-              ? 'No instant match — expanding the search window.'
-              : 'No matching games found right now.'}
+            {hint}
           </p>
         </div>
       </main>
 
-      {/* Pinned footer */}
+      {/* Footer */}
       <footer className="border-t border-white/10 px-4">
         <div className="max-w-4xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© 2025 ttrplobby</div>
@@ -145,3 +193,4 @@ export default function Client() {
     </div>
   );
 }
+
