@@ -81,6 +81,9 @@ export default function LiveRoomPage() {
     return () => clearInterval(id)
   }, [])
 
+  // Poster override discovered from Storage (when DB has no poster field)
+  const [posterOverride, setPosterOverride] = useState<string | null>(null)
+
   useEffect(() => {
     if (!isUuid(roomId)) return
     unmountedRef.current = false
@@ -109,7 +112,7 @@ export default function LiveRoomPage() {
       ] = await Promise.all([
         supabase.from('live_rooms').select('*').eq('id', roomId).maybeSingle(),
         supabase.from('live_games')
-          .select('system,length_minutes,max_players,new_player_friendly,is_18_plus,status')
+          .select('host_id,system,length_minutes,max_players,new_player_friendly,is_18_plus,status')
           .eq('id', roomId)
           .maybeSingle()
       ])
@@ -125,14 +128,35 @@ export default function LiveRoomPage() {
       if (roomRow || gameRow) {
         const merged: RoomDetails = {
           ...(roomRow as any),
+          host_id: (gameRow as any)?.host_id ?? (roomRow as any)?.host_id ?? null,
           system: gameRow?.system ?? (roomRow as any)?.system ?? null,
           length_min: gameRow?.length_minutes ?? (roomRow as any)?.length_min ?? null,
           seats: gameRow?.max_players ?? (roomRow as any)?.seats ?? null,
           welcomes_new: (gameRow as any)?.new_player_friendly ?? (roomRow as any)?.welcomes_new ?? null,
           is_mature: gameRow?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
           status: gameRow?.status ?? (roomRow as any)?.status ?? null,
+          title: (roomRow as any)?.title ?? null,
+          discord_url: (roomRow as any)?.discord_url ?? null,
+          game_url: (roomRow as any)?.game_url ?? null,
+          poster_url: (roomRow as any)?.poster_url ?? null,
+          id: roomId,
+          vibe: (roomRow as any)?.vibe ?? null,
         }
         setRoom(merged)
+
+        // If no poster field in DB, try to auto-discover the latest upload in posters/<host_id>/live/
+        if (!merged.poster_url && merged.host_id) {
+          try {
+            const basePath = `${merged.host_id}/live`
+            const { data: files, error } = await supabase.storage.from('posters').list(basePath, { limit: 100 })
+            if (!error && files && files.length) {
+              // We named files with Date.now() prefix, so lexical desc works well
+              const latest = [...files].sort((a, b) => b.name.localeCompare(a.name))[0]
+              const { data: pub } = supabase.storage.from('posters').getPublicUrl(`${basePath}/${latest.name}`)
+              if (pub?.publicUrl) setPosterOverride(pub.publicUrl)
+            }
+          } catch {}
+        }
       }
 
       // Connect to realtime
@@ -340,13 +364,14 @@ export default function LiveRoomPage() {
   const discordHref = normalizeExternalUrl(room?.discord_url)
   const gameHref = normalizeExternalUrl(room?.game_url)
 
-  // Prefer poster_url, but tolerate other field names from /live/new
+  // Prefer poster_url from DB; otherwise try storage-derived override; else logo
   const rawPoster = useMemo(() => {
     const anyRoom = room as any
     return room?.poster_url || anyRoom?.poster || anyRoom?.image_url || null
   }, [room])
-  const isFallbackPoster = !rawPoster
-  const posterSrc = rawPoster || '/logo.png'
+  const effectivePoster = posterOverride || rawPoster
+  const isFallbackPoster = !effectivePoster
+  const posterSrc = effectivePoster || '/logo.png'
 
   if (!isUuid(roomId)) {
     return (
@@ -442,15 +467,15 @@ export default function LiveRoomPage() {
 
               {/* Link buttons under seats line */}
               <div className="flex items-center gap-2 flex-wrap mt-3">
-                {discordHref ? (
-                  <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                {normalizeExternalUrl(room?.discord_url) ? (
+                  <a href={normalizeExternalUrl(room?.discord_url)!} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
                     Discord
                   </a>
                 ) : (
                   <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
                 )}
-                {gameHref ? (
-                  <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                {normalizeExternalUrl(room?.game_url) ? (
+                  <a href={normalizeExternalUrl(room?.game_url)!} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
                     Game link
                   </a>
                 ) : (
@@ -616,4 +641,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
