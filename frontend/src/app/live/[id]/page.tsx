@@ -6,14 +6,14 @@ import { supabase } from '@/lib/supabaseClient'
 
 type RoomDetails = {
   id: string
-  host_id: string
+  host_id: string | null
   title: string | null
   system: string | null
   vibe: string | null
-  seats: number | null
-  length_min: number | null
-  welcomes_new: boolean | null
-  is_mature: boolean | null
+  seats: number | null               // mirrors live_games.max_players
+  length_min: number | null          // mirrors live_games.length_minutes
+  welcomes_new: boolean | null       // mirrors live_games.new_player_friendly
+  is_mature: boolean | null          // mirrors live_games.is_18_plus
   discord_url: string | null
   game_url: string | null
   poster_url: string | null
@@ -42,14 +42,6 @@ function normalizeExternalUrl(u?: string | null): string | null {
 const isUuid = (s: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 
-const TIPS = [
-  'Share your Discord or VTT link in the card to the left.',
-  'Your lobby pauses if you background the app—return to resume.',
-  'Inactive lobbies auto-close after ~3 minutes. Rejoin to keep it alive.',
-  'Use chat to coordinate seating and start time.',
-  'Hosts can end the lobby from the Menu.',
-]
-
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
@@ -74,17 +66,11 @@ export default function LiveRoomPage() {
   const retryRef = useRef(0)
   const unmountedRef = useRef(false)
 
-  // Tip rotator
-  const [tipIndex, setTipIndex] = useState(0)
-  useEffect(() => {
-    const id = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 4500)
-    return () => clearInterval(id)
-  }, [])
-
   // Poster override discovered from Storage (when DB has no poster field)
   const [posterOverride, setPosterOverride] = useState<string | null>(null)
 
   useEffect(() => {
+    // Do nothing until we have a valid UUID route param
     if (!isUuid(roomId)) return
     unmountedRef.current = false
 
@@ -94,7 +80,7 @@ export default function LiveRoomPage() {
       // Auth + profile
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        router.replace(`/login?next=${encodeURIComponent((typeof location !== 'undefined' ? location.pathname + location.search : `/live/${roomId}`))}`)
+        router.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`)
         return
       }
       const { data: prof } = await supabase
@@ -105,76 +91,41 @@ export default function LiveRoomPage() {
       const myName = prof?.display_name || prof?.username || 'Player'
       setMe({ id: user.id, name: myName, avatar: prof?.avatar_url ?? null })
 
-      // 1) Load from live_games FIRST (now selecting optional metadata if you add such columns)
-      const { data: gameRow, error: gameErr } = await supabase.from('live_games')
-        .select('id,host_id,status,system,length_minutes,max_players,new_player_friendly,is_18_plus,title,vibe,discord_url,game_url,poster_url')
-        .eq('id', roomId)
-        .maybeSingle()
-
-      // 2) Then load from live_rooms (UI/meta) and merge on top where present
-      const { data: roomRow, error: roomErr } = await supabase
-        .from('live_rooms')
-        .select('*')
-        .eq('id', roomId)
-        .maybeSingle()
+      // Load both live_rooms (UI/meta) and live_games (capacity, length, etc) and merge
+      const [
+        { data: roomRow, error: roomErr },
+        { data: gameRow, error: gameErr }
+      ] = await Promise.all([
+        supabase.from('live_rooms').select('*').eq('id', roomId).maybeSingle(),
+        supabase.from('live_games')
+          .select('host_id,system,length_minutes,max_players,new_player_friendly,is_18_plus,status')
+          .eq('id', roomId)
+          .maybeSingle()
+      ])
 
       if (unmountedRef.current) return
 
-      if (gameErr && !gameRow) setErrorMsg(gameErr.message)
-      if (roomErr && !roomRow) {
-        // don’t block on this — live_rooms might be optional in your schema
-        console.warn('live_rooms not found or error:', roomErr.message)
+      if ((roomErr && !roomRow) || (gameErr && !gameRow)) {
+        setErrorMsg(roomErr?.message || gameErr?.message || null)
       }
 
-      // Build merged view from what we have
-      let merged: RoomDetails | null = null
-      if (gameRow || roomRow) {
-        merged = {
-          id: roomId,
+      if (roomRow || gameRow) {
+        const merged: RoomDetails = {
+          ...(roomRow as any),
           host_id: (gameRow as any)?.host_id ?? (roomRow as any)?.host_id ?? null,
-          status: (gameRow as any)?.status ?? (roomRow as any)?.status ?? null,
-          system: (gameRow as any)?.system ?? (roomRow as any)?.system ?? null,
-          length_min: (gameRow as any)?.length_minutes ?? (roomRow as any)?.length_min ?? null,
-          seats: (gameRow as any)?.max_players ?? (roomRow as any)?.seats ?? null,
+          system: gameRow?.system ?? (roomRow as any)?.system ?? null,
+          length_min: gameRow?.length_minutes ?? (roomRow as any)?.length_min ?? null,
+          seats: gameRow?.max_players ?? (roomRow as any)?.seats ?? null,
           welcomes_new: (gameRow as any)?.new_player_friendly ?? (roomRow as any)?.welcomes_new ?? null,
-          is_mature: (gameRow as any)?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
-          title: (gameRow as any)?.title ?? (roomRow as any)?.title ?? null,
-          vibe: (gameRow as any)?.vibe ?? (roomRow as any)?.vibe ?? null,
-          discord_url: (gameRow as any)?.discord_url ?? (roomRow as any)?.discord_url ?? null,
-          game_url: (gameRow as any)?.game_url ?? (roomRow as any)?.game_url ?? null,
-          poster_url: (gameRow as any)?.poster_url ?? (roomRow as any)?.poster_url ?? null,
+          is_mature: gameRow?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
+          status: gameRow?.status ?? (roomRow as any)?.status ?? null,
+          title: (roomRow as any)?.title ?? null,
+          discord_url: (roomRow as any)?.discord_url ?? null,
+          game_url: (roomRow as any)?.game_url ?? null,
+          poster_url: (roomRow as any)?.poster_url ?? null,
+          id: roomId,
+          vibe: (roomRow as any)?.vibe ?? null,
         }
-      }
-
-      // 3) If host just created lobby and meta hasn’t been saved server-side yet,
-      // attempt localStorage fallback so host sees their own inputs immediately.
-      try {
-        if (isHost && (!merged?.title || !merged?.discord_url || !merged?.game_url || !merged?.vibe)) {
-          const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ttrp:lastLobbyMeta') : null
-          if (raw) {
-            const meta = JSON.parse(raw) as Partial<RoomDetails> & { created_for?: string }
-            if (!meta.created_for || meta.created_for === roomId) {
-              merged = {
-                ...(merged || { id: roomId } as RoomDetails),
-                title: merged?.title ?? (meta.title ?? null),
-                vibe: merged?.vibe ?? (meta.vibe ?? null),
-                discord_url: merged?.discord_url ?? (meta.discord_url ?? null),
-                game_url: merged?.game_url ?? (meta.game_url ?? null),
-                poster_url: merged?.poster_url ?? (meta.poster_url ?? null),
-                system: merged?.system ?? (meta.system ?? null),
-                length_min: merged?.length_min ?? (meta.length_min ?? null),
-                seats: merged?.seats ?? (meta.seats ?? null),
-                welcomes_new: merged?.welcomes_new ?? (meta.welcomes_new ?? null),
-                is_mature: merged?.is_mature ?? (meta.is_mature ?? null),
-                host_id: merged?.host_id ?? (meta.host_id ?? null),
-                status: merged?.status ?? (meta.status ?? null),
-              }
-            }
-          }
-        }
-      } catch {}
-
-      if (merged) {
         setRoom(merged)
 
         // If no poster field in DB, try to auto-discover the latest upload in posters/<host_id>/live/
@@ -183,6 +134,7 @@ export default function LiveRoomPage() {
             const basePath = `${merged.host_id}/live`
             const { data: files, error } = await supabase.storage.from('posters').list(basePath, { limit: 100 })
             if (!error && files && files.length) {
+              // We named files with Date.now() prefix, so lexical desc works well
               const latest = [...files].sort((a, b) => b.name.localeCompare(a.name))[0]
               const { data: pub } = supabase.storage.from('posters').getPublicUrl(`${basePath}/${latest.name}`)
               if (pub?.publicUrl) setPosterOverride(pub.publicUrl)
@@ -196,6 +148,7 @@ export default function LiveRoomPage() {
     })()
 
     function connectRealtime(self: { userId: string; name: string; avatar: string | null }) {
+      // Clean any existing channel
       if (channelRef.current) {
         try { channelRef.current.unsubscribe() } catch {}
         try { supabase.removeChannel(channelRef.current) } catch {}
@@ -212,7 +165,7 @@ export default function LiveRoomPage() {
 
       ch.on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState()
-        const list: Array<{ id: string; name: string; avatar: string | null }>= []
+        const list: Array<{ id: string; name: string; avatar: string | null }> = []
         for (const [uid, arr] of Object.entries(state)) {
           const latest = (arr as any[])[(arr as any[]).length - 1]
           list.push({ id: uid, name: latest?.name || 'Player', avatar: latest?.avatar || null })
@@ -259,7 +212,8 @@ export default function LiveRoomPage() {
     function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
       if (unmountedRef.current) return
 
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      // Defer reconnect until tab/app is visible to avoid thrash on mobile lock/background
+      if (document.visibilityState !== 'visible') {
         setRtInfo('Paused (background)')
         const once = () => {
           if (!unmountedRef.current && document.visibilityState === 'visible') {
@@ -290,9 +244,9 @@ export default function LiveRoomPage() {
       }
       if (chCleanup) chCleanup()
     }
-  }, [roomId, router, params])
+  }, [roomId, router])
 
-  // Keep-alive heartbeat
+  // ✅ Server-backed heartbeat to keep connection alive across background/lock
   useEffect(() => {
     if (!me.id || !isUuid(roomId)) return
     let mounted = true
@@ -314,11 +268,13 @@ export default function LiveRoomPage() {
           body: JSON.stringify({ room_id: roomId }),
           keepalive: true,
         })
-      } catch {}
+      } catch {
+        /* ignore noisy errors */
+      }
     }
 
     const onVis = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      if (document.visibilityState === 'hidden') {
         paused = true
         try {
           const blob = new Blob([JSON.stringify({ room_id: roomId })], { type: 'application/json' })
@@ -330,35 +286,34 @@ export default function LiveRoomPage() {
       }
     }
 
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', onVis)
-    }
+    document.addEventListener('visibilitychange', onVis)
     void heartbeat()
     timer = setInterval(() => { if (!paused && mounted) void heartbeat() }, 20000)
 
     return () => {
       mounted = false
       if (timer) clearInterval(timer)
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', onVis)
-      }
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [me.id, roomId])
 
   async function endLobby() {
     if (!isUuid(roomId)) return
-    const ok = typeof window !== 'undefined' ? confirm('End this lobby for everyone?') : false
+    const ok = confirm('End this lobby for everyone?')
     if (!ok) return
     try {
+      // Prefer RPC (deletes DB row + storage + related presence)
       await supabase.rpc('end_live_room', { p_room_id: roomId })
     } catch {
+      // Fallback: at least remove/close room
       try {
         await supabase.from('live_rooms').delete().eq('id', roomId)
-      } catch {}
+      } catch { /* ignore */ }
     }
     router.push('/profile')
   }
 
+  // Chat send
   function send() {
     const msgText = text.trim()
     if (!msgText) return
@@ -372,8 +327,10 @@ export default function LiveRoomPage() {
       text: msgText,
       ts: Date.now()
     }
+    // optimistic local append
     setChat(prev => [...prev, msg].slice(-200))
     setText('')
+    // fire onto the channel
     ch.send({ type: 'broadcast', event: 'chat', payload: msg })
   }
 
@@ -382,10 +339,10 @@ export default function LiveRoomPage() {
       const url = `${location.origin}/live/${roomId}`
       navigator.clipboard.writeText(url)
       alert('Lobby link copied to clipboard')
-    } catch {}
+    } catch { /* ignore */ }
   }
 
-  // Seats
+  // 🧮 Seats display: prefer merged.seats (live_games.max_players) else "—"
   const seatCap = useMemo<number | null>(() => {
     const anyRoom = room as any
     if (room?.seats != null) return Number(room.seats)
@@ -406,26 +363,25 @@ export default function LiveRoomPage() {
     return room?.poster_url || anyRoom?.poster || anyRoom?.image_url || null
   }, [room])
   const effectivePoster = posterOverride || rawPoster
-  const isFallbackPoster = !effectivePoster
   const posterSrc = effectivePoster || '/logo.png'
 
   if (!isUuid(roomId)) {
     return (
-      <div className="min-h-screen bg-black text-white grid place-items-center">
+      <div className="min-h-screen bg-zinc-950 text-white grid place-items-center">
         <div className="text-white/60 text-sm">Setting up lobby…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
-      {/* Header (kept) */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/70 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-950 text-white">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <a href="/" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:border-white/30">
             <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
             <span className={`px-2 py-1 rounded-md text-xs border ${
               rtStatus === 'connected' ? 'border-emerald-400 text-emerald-300' :
               rtStatus === 'connecting' ? 'border-white/20 text-white/60' :
@@ -436,10 +392,7 @@ export default function LiveRoomPage() {
             {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
 
             {/* Profile button */}
-            <a
-              href="/profile"
-              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm"
-            >
+            <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
               Profile
             </a>
 
@@ -453,112 +406,77 @@ export default function LiveRoomPage() {
         </div>
       </header>
 
-      {/* Body */}
-      <div className="relative flex-1 flex">
-        {/* FULL-WIDTH CENTERED OVERLAYED LOGO + STATUS/TIPS */}
-        <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center justify-center translate-y-[-6%] text-center px-4">
-            <img
-              src="/logo.png"
-              alt="TTRPLobby"
-              className="w-64 h-64 md:w-80 md:h-80 opacity-90 animate-spin-slow"
-            />
-            <div className="mt-4 text-white/80 text-lg font-medium">Searching for active players…</div>
-            <div className="mt-1 text-white/60 text-sm">{TIPS[tipIndex]}</div>
+      {/* Hero / Poster + quick links (LOOK from page 82) */}
+      <section className="max-w-6xl mx-auto px-4 py-6 grid md:grid-cols-[360px,1fr] gap-5">
+        {/* Left: Poster + link chips */}
+        <div className="rounded-2xl border border-white/10 overflow-hidden bg-zinc-900/60">
+          <img
+            src={posterSrc}
+            alt={room?.title || 'Live game'}
+            className={`w-full h-56 object-${effectivePoster ? 'cover' : 'contain'} bg-black`}
+          />
+          <div className="p-3 text-sm text-white/70 border-t border-white/10 flex items-center gap-3 flex-wrap">
+            {discordHref ? (
+              <a href={discordHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                <span>Discord</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
+            )}
+            {gameHref ? (
+              <a href={gameHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                <span>Game link</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Game link: not set</span>
+            )}
           </div>
         </div>
 
-        {/* LEFT: Single consolidated card (on top of overlay) */}
-        <aside className="relative z-10 w-full max-w-[380px] p-4">
-          <div className="rounded-2xl border border-white/10 bg-zinc-900/70 backdrop-blur p-4 space-y-4">
-            {/* Poster image above title (with smarter fallback size) */}
-            {isFallbackPoster ? (
-              <div className="flex items-center justify-center">
-                <img
-                  src="/logo.png"
-                  alt="Game image"
-                  className="w-[60%] aspect-square object-contain rounded-xl border border-white/10"
-                />
-              </div>
-            ) : (
-              <img
-                src={posterSrc!}
-                alt="Game image"
-                className="w-full aspect-video object-cover rounded-xl border border-white/10"
-              />
-            )}
-
-            {/* Title + meta */}
-            <div>
-              <div className="text-xs uppercase tracking-wide text-white/50">Live game</div>
-              <h1 className="text-xl font-bold mt-1">{room?.title || 'Untitled live game'}</h1>
-              <div className="text-white/70 mt-1">
-                {room?.system || 'TTRPG'}
-                {room?.vibe ? ` • ${room.vibe}` : ''}
-                {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1 : 0)}h` : ''}
-              </div>
-              <div className="text-white/60 text-sm mt-2">
-                Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
-              </div>
-
-              {/* Link buttons under seats line */}
-              <div className="flex items-center gap-2 flex-wrap mt-3">
-                {discordHref ? (
-                  <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
-                    Discord
-                  </a>
-                ) : (
-                  <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
-                )}
-                {gameHref ? (
-                  <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
-                    Game link
-                  </a>
-                ) : (
-                  <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Game link: not set</span>
-                )}
-              </div>
-
-              {errorMsg && <div className="mt-2 text-sm text-red-400">{errorMsg}</div>}
-            </div>
-
-            <hr className="border-white/10" />
-
-            {/* Players */}
-            <div>
-              <div className="text-sm font-semibold mb-2">Players</div>
-              <div className="space-y-2">
-                {peers.map(p => (
-                  <div key={p.id} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <img
-                        src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`}
-                        alt=""
-                        className="h-7 w-7 rounded-full object-cover"
-                      />
-                      <div className="truncate">{p.name}</div>
-                    </div>
-                    <div className="relative">
-                      <PlayerMenu player={p} />
-                    </div>
-                  </div>
-                ))}
-                {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
-              </div>
-            </div>
-
-            <hr className="border-white/10" />
-
-            {/* Note */}
-            <div className="text-sm text-white/70">
-              Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
-            </div>
+        {/* Right: Summary card */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/50">Live game</div>
+          <h1 className="text-2xl font-bold">{room?.title || 'Untitled live game'}</h1>
+          <div className="text-white/70 mt-1">
+            {room?.system || 'TTRPG'}
+            {room?.vibe ? ` • ${room.vibe}` : ''}
+            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
           </div>
-        </aside>
+          <div className="text-white/60 text-sm mt-2">
+            Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
+          </div>
+          {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
+        </div>
+      </section>
 
-        {/* Spacer to keep left card pinned and allow overlay to center across full width */}
-        <div className="flex-1" />
-      </div>
+      {/* Participants & Notes */}
+      <section className="max-w-6xl mx-auto px-4 pb-16 grid md:grid-cols-[260px,1fr] gap-5">
+        {/* Participants list */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+          <div className="text-sm font-semibold">Players</div>
+          <div className="mt-2 space-y-2">
+            {peers.map(p => (
+              <div key={p.id} className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <img src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`} alt="" className="h-7 w-7 rounded-full object-cover" />
+                  <div className="truncate">{p.name}</div>
+                </div>
+                <div className="relative">
+                  <PlayerMenu player={p} />
+                </div>
+              </div>
+            ))}
+            {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
+          </div>
+        </div>
+
+        {/* Main area placeholder / guidance */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 min-h-[220px]">
+          <div className="text-sm text-white/70">
+            Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
+          </div>
+        </div>
+      </section>
 
       {/* Floating chat (bottom-right) */}
       <ChatDock
@@ -568,11 +486,6 @@ export default function LiveRoomPage() {
         value={text}
         onChange={setText}
       />
-
-      <style jsx global>{`
-        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spin-slow 2.5s linear infinite; }
-      `}</style>
     </div>
   )
 }
