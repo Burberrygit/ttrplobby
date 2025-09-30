@@ -315,6 +315,40 @@ export default function LiveRoomPage() {
     router.push('/profile')
   }
 
+  // 🔨 Kick a player (host-only): calls RPC `kick_live_player(p_game_id uuid, p_user_id uuid)`
+  async function kickPlayer(playerId: string, playerName: string) {
+    if (!room?.host_id || !isHost || playerId === room.host_id) return
+    const ok = confirm(`Kick ${playerName} from this lobby?`)
+    if (!ok) return
+    try {
+      const { error } = await supabase.rpc('kick_live_player', {
+        p_game_id: room.id,
+        p_user_id: playerId,
+      })
+      if (error) {
+        setErrorMsg(error.message)
+        return
+      }
+      // Optimistic: remove from local presence list
+      setPeers(prev => prev.filter(p => p.id !== playerId))
+      // Broadcast system message
+      const ch = channelRef.current
+      if (ch) {
+        const msg: ChatMsg = {
+          id: crypto.randomUUID(),
+          userId: 'system',
+          name: 'System',
+          avatar: null,
+          text: `${playerName} was removed by the host`,
+          ts: Date.now()
+        }
+        ch.send({ type: 'broadcast', event: 'chat', payload: msg })
+      }
+    } catch (e: any) {
+      setErrorMsg(e?.message || 'Failed to kick player')
+    }
+  }
+
   // Send chat message
   function send() {
     const msgText = text.trim()
@@ -482,21 +516,28 @@ export default function LiveRoomPage() {
             <div>
               <div className="text-sm font-semibold mb-2">Players</div>
               <div className="space-y-2">
-                {peers.map(p => (
-                  <div key={p.id} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <img
-                        src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`}
-                        alt=""
-                        className="h-7 w-7 rounded-full object-cover"
-                      />
-                      <div className="truncate">{p.name}</div>
+                {peers.map(p => {
+                  const canKick = Boolean(isHost && room?.host_id && p.id !== room.host_id)
+                  return (
+                    <div key={p.id} className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <img
+                          src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`}
+                          alt=""
+                          className="h-7 w-7 rounded-full object-cover"
+                        />
+                        <div className="truncate">{p.name}</div>
+                      </div>
+                      <div className="relative">
+                        {canKick && (
+                          <PlayerMenu
+                            onKick={() => kickPlayer(p.id, p.name)}
+                          />
+                        )}
+                      </div>
                     </div>
-                    <div className="relative">
-                      <PlayerMenu player={p} />
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
               </div>
             </div>
@@ -603,20 +644,25 @@ function Menu({ children }: { children: React.ReactNode }) {
   )
 }
 
-function PlayerMenu({ player }: { player: { id: string, name: string, avatar: string | null } }) {
+function PlayerMenu({ onKick }: { onKick: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
       <button
         onClick={() => setOpen(v => !v)}
         className="px-2 py-1 rounded-md border border-white/20 hover:border-white/40 text-xs"
+        aria-label="Player actions"
       >
         ⋯
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
-          <a href="#" className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10">Send message</a>
-          <a href="#" className="block px-3 py-2 rounded-lg text-sm hover:bg:white/10">View profile</a>
+          <button
+            onClick={() => { setOpen(false); onKick() }}
+            className="block w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300"
+          >
+            Kick
+          </button>
         </div>
       )}
     </div>
@@ -631,4 +677,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
