@@ -324,6 +324,7 @@ export default function LiveRoomPage() {
 
   const discordHref = normalizeExternalUrl(room?.discord_url)
   const gameHref = normalizeExternalUrl(room?.game_url)
+  const posterSrc = useMemo(() => room?.poster_url || '/logo.png', [room?.poster_url])
 
   if (!isUuid(roomId)) {
     return (
@@ -351,7 +352,7 @@ export default function LiveRoomPage() {
             </span>
             {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
 
-            {/* NEW: Profile button */}
+            {/* Profile button */}
             <a
               href="/profile"
               className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm"
@@ -371,17 +372,24 @@ export default function LiveRoomPage() {
 
       {/* Body */}
       <div className="relative flex-1 flex">
-        {/* LEFT: Single consolidated card */}
-        <aside className="w-full max-w-[380px] p-4">
+        {/* FULL-WIDTH CENTERED OVERLAYED LOGO */}
+        <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
+          <img
+            src="/logo.png"
+            alt="TTRPLobby"
+            className="w-72 h-72 md:w-96 md:h-96 opacity-90 animate-spin-slow"
+          />
+        </div>
+
+        {/* LEFT: Single consolidated card (on top of overlay) */}
+        <aside className="relative z-10 w-full max-w-[380px] p-4">
           <div className="rounded-2xl border border-white/10 bg-zinc-900/70 backdrop-blur p-4 space-y-4">
-            {/* NEW: Poster image above title */}
-            {room?.poster_url && (
-              <img
-                src={room.poster_url}
-                alt="Game image"
-                className="w-full aspect-video object-cover rounded-xl border border-white/10"
-              />
-            )}
+            {/* Poster image above title (with fallback) */}
+            <img
+              src={posterSrc}
+              alt="Game image"
+              className="w-full aspect-video object-cover rounded-xl border border-white/10"
+            />
 
             {/* Title + meta */}
             <div>
@@ -396,7 +404,7 @@ export default function LiveRoomPage() {
                 Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
               </div>
 
-              {/* MOVED: Link buttons under seats line */}
+              {/* Link buttons under seats line */}
               <div className="flex items-center gap-2 flex-wrap mt-3">
                 {discordHref ? (
                   <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
@@ -451,16 +459,8 @@ export default function LiveRoomPage() {
           </div>
         </aside>
 
-        {/* CENTER: Rotating logo (bigger & perfectly centered) */}
-        <main className="relative flex-1 flex items-center justify-center">
-          <div className="pointer-events-none text-center">
-            <img
-              src="/logo.png"
-              alt="TTRPLobby"
-              className="w-56 h-56 opacity-90 animate-spin-slow mx-auto"
-            />
-          </div>
-        </main>
+        {/* Spacer to keep left card pinned and allow overlay to center across full width */}
+        <div className="flex-1" />
       </div>
 
       {/* Floating chat (bottom-right) */}
@@ -580,4 +580,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
