@@ -1,4 +1,3 @@
-// File: frontend/src/app/schedule/SearchClient.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -54,7 +53,7 @@ export default function SearchClient() {
   // --- filters (seed from URL) ---
   const [q, setQ] = useState(decode(params.get('q') || ''))
   const [system, setSystem] = useState<string>(params.get('system') || 'Any')
-  const [onlySeats, setOnlySeats] = useState(params.get('seats') === 'open')       // from old link format
+  const [onlySeats, setOnlySeats] = useState(params.get('seats') === 'open')
   const [welcomesNew, setWelcomesNew] = useState(params.get('new') === '1')
   const [mature, setMature] = useState(params.get('mature') === '1')
   const [sortBy, setSortBy] = useState<string>(params.get('sort') || 'Relevance')
@@ -94,7 +93,6 @@ export default function SearchClient() {
   }
 
   useEffect(() => {
-    // initial load
     ;(async () => {
       try {
         setLoading(true)
@@ -141,7 +139,6 @@ export default function SearchClient() {
       } else if (sortBy === 'Newest') {
         query = query.order('created_at', { ascending: false })
       } else {
-        // default order by updated_at so fresh items bubble while we compute relevance/popular client-side
         query = query.order('updated_at', { ascending: false })
       }
 
@@ -207,13 +204,12 @@ export default function SearchClient() {
     <div className="min-h-screen flex flex-col text-white">
       <main className="flex-1">
         <div className="max-w-6xl mx-auto w-full px-4 py-8">
-          <h1 className="text-2xl font-bold text-white">Search games</h1>
-          <p className="text-white/70 mt-1">Find a table by title, system, vibe, time zone, or availability.</p>
+          <h1 className="text-2xl font-bold text-white">Search scheduled games</h1>
+          <p className="text-white/70 mt-1">Apply to tables by title, system, vibe, time zone, or availability.</p>
 
-          {/* Search + Filters Bar (no dropdowns; everything inline) */}
+          {/* Search + Filters Bar */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
             <div className="grid gap-3">
-              {/* Row 1: query + core selects */}
               <div className="flex flex-col lg:flex-row lg:items-center gap-3">
                 <div className="flex-1">
                   <label className="sr-only">Search</label>
@@ -244,7 +240,6 @@ export default function SearchClient() {
                 />
               </div>
 
-              {/* Row 2: inline toggles (formerly in Filters dropdown) */}
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <label className="inline-flex items-center gap-2">
                   <input type="checkbox" className="accent-brand" checked={onlySeats} onChange={e => setOnlySeats(e.target.checked)} />
@@ -332,14 +327,17 @@ function GameCard({ g, tz }: { g: any, tz: string }) {
   const when = g.scheduled_at ? fmtDateInTz(g.scheduled_at, tz) : null
   const tzBadge = g.time_zone ? g.time_zone : null
 
+  // NEW: Always send users to the Apply flow (scheduled games)
+  const applyHref = `/schedule/${g.id}/apply`
+
   return (
     <div className="rounded-2xl border border-white/10 bg-zinc-900/60 overflow-hidden">
-      <a href={`/lobbies/${g.id}`} className="block">
+      <a href={applyHref} className="block">
         <img src={g.poster_url || '/game-poster-fallback.jpg'} alt={g.title} className="h-40 w-full object-cover" />
       </a>
       <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <a href={`/lobbies/${g.id}`} className="text-base font-semibold truncate hover:underline">
+          <a href={applyHref} className="text-base font-semibold truncate hover:underline">
             {g.title || 'Untitled game'}
           </a>
           <span className={`text-xs px-2 py-0.5 rounded-lg border ${full ? 'border-white/20 text-white/60' : 'border-brand text-brand'}`}>
@@ -352,6 +350,16 @@ function GameCard({ g, tz }: { g: any, tz: string }) {
         <div className="text-xs text-white/50 mt-1">
           Length {lengthText} • {g.welcomes_new ? 'New player friendly' : 'Experienced only'} • {g.is_mature ? '18+' : 'All ages'}
           {tzBadge ? <> • TZ: {tzBadge}</> : null}
+        </div>
+
+        {/* NEW: Apply CTA */}
+        <div className="mt-2">
+          <a
+            href={applyHref}
+            className="inline-block px-3 py-1.5 rounded-lg bg-brand hover:bg-brandHover text-sm font-medium"
+          >
+            Apply
+          </a>
         </div>
       </div>
     </div>
