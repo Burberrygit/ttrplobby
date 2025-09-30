@@ -102,11 +102,24 @@ export default function ApplicationDetailPage() {
         discord_invite: discordInvite,
         vtt_link: vttLink,
       }
-      const { error: upErr } = await supabase
+      let { error: upErr } = await supabase
         .from('applications')
         .update({ status: 'accepted', dm_decision: decision })
         .eq('id', app.id)
-      if (upErr) throw upErr
+
+      // Fallback if schema cache hasn't picked up dm_decision yet
+      if (upErr) {
+        const msg = String(upErr.message || '').toLowerCase()
+        if (msg.includes('dm_decision')) {
+          const { error: upErr2 } = await supabase
+            .from('applications')
+            .update({ status: 'accepted' })
+            .eq('id', app.id)
+          if (upErr2) throw upErr2
+        } else {
+          throw upErr
+        }
+      }
 
       // 3) Notify the player
       const title = `You're in! Accepted to ${game.title ?? 'a game'}`
@@ -144,11 +157,24 @@ export default function ApplicationDetailPage() {
         declined_at: new Date().toISOString(),
         message: declineMsg || null
       }
-      const { error: upErr } = await supabase
+      let { error: upErr } = await supabase
         .from('applications')
         .update({ status: 'declined', dm_decision: decision })
         .eq('id', app.id)
-      if (upErr) throw upErr
+
+      // Fallback if schema cache hasn't picked up dm_decision yet
+      if (upErr) {
+        const msg = String(upErr.message || '').toLowerCase()
+        if (msg.includes('dm_decision')) {
+          const { error: upErr2 } = await supabase
+            .from('applications')
+            .update({ status: 'declined' })
+            .eq('id', app.id)
+          if (upErr2) throw upErr2
+        } else {
+          throw upErr
+        }
+      }
 
       // notify
       const { error: nErr } = await supabase.from('notifications').insert({
@@ -294,3 +320,4 @@ export default function ApplicationDetailPage() {
     </div>
   )
 }
+
