@@ -42,6 +42,14 @@ function normalizeExternalUrl(u?: string | null): string | null {
 const isUuid = (s: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 
+const TIPS = [
+  'Share your Discord or VTT link in the card to the left.',
+  'Your lobby pauses if you background the app—return to resume.',
+  'Inactive lobbies auto-close after ~3 minutes. Rejoin to keep it alive.',
+  'Use chat to coordinate seating and start time.',
+  'Hosts can end the lobby from the Menu.',
+]
+
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
@@ -65,6 +73,13 @@ export default function LiveRoomPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const retryRef = useRef(0)
   const unmountedRef = useRef(false)
+
+  // Tip rotator
+  const [tipIndex, setTipIndex] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 4500)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     if (!isUuid(roomId)) return
@@ -141,7 +156,7 @@ export default function LiveRoomPage() {
 
       ch.on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState()
-        const list: Array<{ id: string; name: string; avatar: string | null }> = []
+        const list: Array<{ id: string; name: string; avatar: string | null }>= []
         for (const [uid, arr] of Object.entries(state)) {
           const latest = (arr as any[])[(arr as any[]).length - 1]
           list.push({ id: uid, name: latest?.name || 'Player', avatar: latest?.avatar || null })
@@ -324,7 +339,14 @@ export default function LiveRoomPage() {
 
   const discordHref = normalizeExternalUrl(room?.discord_url)
   const gameHref = normalizeExternalUrl(room?.game_url)
-  const posterSrc = useMemo(() => room?.poster_url || '/logo.png', [room?.poster_url])
+
+  // Prefer poster_url, but tolerate other field names from /live/new
+  const rawPoster = useMemo(() => {
+    const anyRoom = room as any
+    return room?.poster_url || anyRoom?.poster || anyRoom?.image_url || null
+  }, [room])
+  const isFallbackPoster = !rawPoster
+  const posterSrc = rawPoster || '/logo.png'
 
   if (!isUuid(roomId)) {
     return (
@@ -372,24 +394,38 @@ export default function LiveRoomPage() {
 
       {/* Body */}
       <div className="relative flex-1 flex">
-        {/* FULL-WIDTH CENTERED OVERLAYED LOGO */}
+        {/* FULL-WIDTH CENTERED OVERLAYED LOGO + STATUS/TIPS (moved slightly up) */}
         <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
-          <img
-            src="/logo.png"
-            alt="TTRPLobby"
-            className="w-72 h-72 md:w-96 md:h-96 opacity-90 animate-spin-slow"
-          />
+          <div className="flex flex-col items-center justify-center translate-y-[-6%] text-center px-4">
+            <img
+              src="/logo.png"
+              alt="TTRPLobby"
+              className="w-64 h-64 md:w-80 md:h-80 opacity-90 animate-spin-slow"
+            />
+            <div className="mt-4 text-white/80 text-lg font-medium">Searching for active players…</div>
+            <div className="mt-1 text-white/60 text-sm">{TIPS[tipIndex]}</div>
+          </div>
         </div>
 
         {/* LEFT: Single consolidated card (on top of overlay) */}
         <aside className="relative z-10 w-full max-w-[380px] p-4">
           <div className="rounded-2xl border border-white/10 bg-zinc-900/70 backdrop-blur p-4 space-y-4">
-            {/* Poster image above title (with fallback) */}
-            <img
-              src={posterSrc}
-              alt="Game image"
-              className="w-full aspect-video object-cover rounded-xl border border-white/10"
-            />
+            {/* Poster image above title (with smarter fallback size) */}
+            {isFallbackPoster ? (
+              <div className="flex items-center justify-center">
+                <img
+                  src="/logo.png"
+                  alt="Game image"
+                  className="w-[60%] aspect-square object-contain rounded-xl border border-white/10"
+                />
+              </div>
+            ) : (
+              <img
+                src={posterSrc!}
+                alt="Game image"
+                className="w-full aspect-video object-cover rounded-xl border border-white/10"
+              />
+            )}
 
             {/* Title + meta */}
             <div>
@@ -580,3 +616,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
