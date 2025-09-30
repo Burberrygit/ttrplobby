@@ -73,6 +73,7 @@ export default function LiveRoomPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const retryRef = useRef(0)
   const unmountedRef = useRef(false)
+  const redirectingRef = useRef(false)
 
   // Tip rotator (UI only)
   const [tipIndex, setTipIndex] = useState(0)
@@ -143,6 +144,9 @@ export default function LiveRoomPage() {
         setRoom(merged)
       }
 
+      // Before connecting realtime, sanity-check that I am still seated (if not host)
+      await ensureStillSeatedOrRedirect(user.id)
+
       // Connect to realtime
       connectRealtime({ userId: user.id, name: myName, avatar: prof?.avatar_url ?? null })
     })()
@@ -178,7 +182,7 @@ export default function LiveRoomPage() {
         setChat(prev => [...prev, msg].slice(-200))
       })
 
-      // 🔔 NEW: if this client gets kicked, redirect them to Search with filters + exclude
+      // If this client gets kicked, unsubscribe and redirect away
       ch.on('broadcast', { event: 'kicked' }, ({ payload }) => {
         const { userId, gameId } = (payload || {}) as { userId?: string; gameId?: string }
         if (userId && userId === self.userId) {
@@ -218,13 +222,13 @@ export default function LiveRoomPage() {
     }
 
     function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
-      if (unmountedRef.current) return
+      if (unmountedRef.current || redirectingRef.current) return
 
       // Defer reconnect until tab/app is visible to avoid thrash on mobile lock/background
       if (document.visibilityState !== 'visible') {
         setRtInfo('Paused (background)')
         const once = () => {
-          if (!unmountedRef.current && document.visibilityState === 'visible') {
+          if (!unmountedRef.current && document.visibilityState === 'visible' && !redirectingRef.current) {
             document.removeEventListener('visibilitychange', once)
             connectRealtime(self)
           }
@@ -238,9 +242,22 @@ export default function LiveRoomPage() {
       const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(tries - 1, 5))) // 1s..30s
       setRtInfo(`Retrying in ${Math.round(delay/1000)}s…`)
       setTimeout(() => {
-        if (unmountedRef.current) return
+        if (unmountedRef.current || redirectingRef.current) return
         connectRealtime(self)
       }, delay)
+    }
+
+    async function ensureStillSeatedOrRedirect(userId: string) {
+      if (isHost) return
+      // Am I still seated in this game? If not -> redirect to search (exclude this lobby)
+      const { count } = await supabase
+        .from('live_game_players')
+        .select('game_id', { head: true, count: 'exact' })
+        .eq('game_id', roomId)
+        .eq('user_id', userId)
+      if (!count || count < 1) {
+        handleKicked(roomId)
+      }
     }
 
     return () => {
@@ -252,32 +269,45 @@ export default function LiveRoomPage() {
       }
       if (chCleanup) chCleanup()
     }
-  }, [roomId, router])
+  }, [roomId, router, isHost])
 
-  // 🔴 Do NOT auto-end lobby on background/unload. Keep it alive.
-
-  // ✅ Server-backed heartbeat to keep connection alive across background/lock
+  // ✅ Server-backed heartbeat + membership check (keeps connection alive & redirects if removed)
   useEffect(() => {
     if (!me.id || !isUuid(roomId)) return
     let mounted = true
     let timer: ReturnType<typeof setInterval> | null = null
     let paused = false
 
-    async function heartbeat() {
+    async function heartbeatAndCheck() {
       try {
-        if (!mounted) return
+        if (!mounted || redirectingRef.current) return
         const { data: { session } } = await supabase.auth.getSession()
         const token = session?.access_token
-        if (!token) return
-        await fetch('/api/live/heartbeat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ room_id: roomId }),
-          keepalive: true,
-        })
+
+        // fire-and-forget heartbeat
+        if (token) {
+          fetch('/api/live/heartbeat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ room_id: roomId }),
+            keepalive: true,
+          }).catch(() => {})
+        }
+
+        // membership check (only for non-hosts)
+        if (!isHost) {
+          const { count } = await supabase
+            .from('live_game_players')
+            .select('game_id', { head: true, count: 'exact' })
+            .eq('game_id', roomId)
+            .eq('user_id', me.id)
+          if (!count || count < 1) {
+            handleKicked(roomId)
+          }
+        }
       } catch {
         /* ignore noisy errors */
       }
@@ -292,20 +322,20 @@ export default function LiveRoomPage() {
         } catch {}
       } else {
         paused = false
-        void heartbeat()
+        void heartbeatAndCheck()
       }
     }
 
     document.addEventListener('visibilitychange', onVis)
-    void heartbeat()
-    timer = setInterval(() => { if (!paused && mounted) void heartbeat() }, 20000)
+    void heartbeatAndCheck()
+    timer = setInterval(() => { if (!paused && mounted) void heartbeatAndCheck() }, 20000)
 
     return () => {
       mounted = false
       if (timer) clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [me.id, roomId])
+  }, [me.id, roomId, isHost])
 
   async function endLobby() {
     if (!isUuid(roomId)) return
@@ -323,8 +353,17 @@ export default function LiveRoomPage() {
     router.push('/profile')
   }
 
-  // ➕ NEW: handle being kicked — redirect to Search with saved filters and exclude this lobby
+  // ➕ handle being kicked — unsubscribe channel and redirect to Search with filters + exclude
   function handleKicked(gameId: string) {
+    if (redirectingRef.current) return
+    redirectingRef.current = true
+    try {
+      if (channelRef.current) {
+        try { channelRef.current.unsubscribe() } catch {}
+        try { supabase.removeChannel(channelRef.current) } catch {}
+        channelRef.current = null
+      }
+    } catch {}
     try {
       const filters = JSON.parse(localStorage.getItem('live:lastFilters') || 'null') || {}
       const q = new URLSearchParams()
@@ -339,7 +378,7 @@ export default function LiveRoomPage() {
     }
   }
 
-  // 🔨 Kick a player (host-only): calls RPC `kick_live_player(p_game_id uuid, p_user_id uuid)`
+  // 🔨 Kick a player (host-only)
   async function kickPlayer(playerId: string, playerName: string) {
     if (!room?.host_id || !isHost || playerId === room.host_id) return
     const ok = confirm(`Kick ${playerName} from this lobby?`)
@@ -350,10 +389,17 @@ export default function LiveRoomPage() {
         p_user_id: playerId,
       })
       if (error) {
+        // If they're already gone, show a friendly note instead of surfacing the DB error
+        if (String(error.message || '').toLowerCase().includes('user_not_in_game')) {
+          setErrorMsg(`${playerName} is already removed.`)
+          // prune from UI if still visible
+          setPeers(prev => prev.filter(p => p.id !== playerId))
+          return
+        }
         setErrorMsg(error.message)
         return
       }
-      // Optimistic: remove from local presence list
+      // Optimistic UI: remove from local presence list
       setPeers(prev => prev.filter(p => p.id !== playerId))
       // Broadcast: system message + kicked signal so the target tab redirects
       const ch = channelRef.current
@@ -403,7 +449,7 @@ export default function LiveRoomPage() {
     } catch { /* ignore */ }
   }
 
-  // 🧮 Seats display: prefer merged.seats (live_games.max_players) else "—"
+  // 🧮 Seats display
   const seatCap = useMemo<number | null>(() => {
     const anyRoom = room as any
     if (room?.seats != null) return Number(room.seats)
@@ -418,7 +464,7 @@ export default function LiveRoomPage() {
   const discordHref = normalizeExternalUrl(room?.discord_url)
   const gameHref = normalizeExternalUrl(room?.game_url)
 
-  // Poster: ONLY use uploaded poster_url or fallback to logo.png
+  // Poster: ONLY uploaded poster_url or fallback to logo.png
   const isFallbackPoster = !room?.poster_url
   const posterSrc = room?.poster_url || '/logo.png'
 
@@ -516,15 +562,15 @@ export default function LiveRoomPage() {
 
               {/* Link buttons under seats line */}
               <div className="flex items-center gap-2 flex-wrap mt-3">
-                {discordHref ? (
-                  <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                {normalizeExternalUrl(room?.discord_url) ? (
+                  <a href={normalizeExternalUrl(room?.discord_url)!} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
                     Discord
                   </a>
                 ) : (
                   <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
                 )}
-                {gameHref ? (
-                  <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                {normalizeExternalUrl(room?.game_url) ? (
+                  <a href={normalizeExternalUrl(room?.game_url)!} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
                     Game link
                   </a>
                 ) : (
@@ -702,3 +748,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
