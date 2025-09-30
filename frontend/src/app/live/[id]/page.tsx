@@ -94,7 +94,7 @@ export default function LiveRoomPage() {
       // Auth + profile
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        router.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`)
+        router.replace(`/login?next=${encodeURIComponent((typeof location !== 'undefined' ? location.pathname + location.search : `/live/${roomId}`))}`)
         return
       }
       const { data: prof } = await supabase
@@ -105,43 +105,76 @@ export default function LiveRoomPage() {
       const myName = prof?.display_name || prof?.username || 'Player'
       setMe({ id: user.id, name: myName, avatar: prof?.avatar_url ?? null })
 
-      // Load both live_rooms (UI/meta) and live_games (capacity, length, etc) and merge
-      const [
-        { data: roomRow, error: roomErr },
-        { data: gameRow, error: gameErr }
-      ] = await Promise.all([
-        supabase.from('live_rooms').select('*').eq('id', roomId).maybeSingle(),
-        supabase.from('live_games')
-          .select('host_id,system,length_minutes,max_players,new_player_friendly,is_18_plus,status')
-          .eq('id', roomId)
-          .maybeSingle()
-      ])
+      // 1) Load from live_games FIRST (now selecting optional metadata if you add such columns)
+      const { data: gameRow, error: gameErr } = await supabase.from('live_games')
+        .select('id,host_id,status,system,length_minutes,max_players,new_player_friendly,is_18_plus,title,vibe,discord_url,game_url,poster_url')
+        .eq('id', roomId)
+        .maybeSingle()
+
+      // 2) Then load from live_rooms (UI/meta) and merge on top where present
+      const { data: roomRow, error: roomErr } = await supabase
+        .from('live_rooms')
+        .select('*')
+        .eq('id', roomId)
+        .maybeSingle()
 
       if (unmountedRef.current) return
 
+      if (gameErr && !gameRow) setErrorMsg(gameErr.message)
       if (roomErr && !roomRow) {
-        setErrorMsg(roomErr.message)
-      } else if (gameErr && !gameRow) {
-        setErrorMsg(gameErr.message)
+        // don’t block on this — live_rooms might be optional in your schema
+        console.warn('live_rooms not found or error:', roomErr.message)
       }
 
-      if (roomRow || gameRow) {
-        const merged: RoomDetails = {
-          ...(roomRow as any),
-          host_id: (gameRow as any)?.host_id ?? (roomRow as any)?.host_id ?? null,
-          system: gameRow?.system ?? (roomRow as any)?.system ?? null,
-          length_min: gameRow?.length_minutes ?? (roomRow as any)?.length_min ?? null,
-          seats: gameRow?.max_players ?? (roomRow as any)?.seats ?? null,
-          welcomes_new: (gameRow as any)?.new_player_friendly ?? (roomRow as any)?.welcomes_new ?? null,
-          is_mature: gameRow?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
-          status: gameRow?.status ?? (roomRow as any)?.status ?? null,
-          title: (roomRow as any)?.title ?? null,
-          discord_url: (roomRow as any)?.discord_url ?? null,
-          game_url: (roomRow as any)?.game_url ?? null,
-          poster_url: (roomRow as any)?.poster_url ?? null,
+      // Build merged view from what we have
+      let merged: RoomDetails | null = null
+      if (gameRow || roomRow) {
+        merged = {
           id: roomId,
-          vibe: (roomRow as any)?.vibe ?? null,
+          host_id: (gameRow as any)?.host_id ?? (roomRow as any)?.host_id ?? null,
+          status: (gameRow as any)?.status ?? (roomRow as any)?.status ?? null,
+          system: (gameRow as any)?.system ?? (roomRow as any)?.system ?? null,
+          length_min: (gameRow as any)?.length_minutes ?? (roomRow as any)?.length_min ?? null,
+          seats: (gameRow as any)?.max_players ?? (roomRow as any)?.seats ?? null,
+          welcomes_new: (gameRow as any)?.new_player_friendly ?? (roomRow as any)?.welcomes_new ?? null,
+          is_mature: (gameRow as any)?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
+          title: (gameRow as any)?.title ?? (roomRow as any)?.title ?? null,
+          vibe: (gameRow as any)?.vibe ?? (roomRow as any)?.vibe ?? null,
+          discord_url: (gameRow as any)?.discord_url ?? (roomRow as any)?.discord_url ?? null,
+          game_url: (gameRow as any)?.game_url ?? (roomRow as any)?.game_url ?? null,
+          poster_url: (gameRow as any)?.poster_url ?? (roomRow as any)?.poster_url ?? null,
         }
+      }
+
+      // 3) If host just created lobby and meta hasn’t been saved server-side yet,
+      // attempt localStorage fallback so host sees their own inputs immediately.
+      try {
+        if (isHost && (!merged?.title || !merged?.discord_url || !merged?.game_url || !merged?.vibe)) {
+          const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ttrp:lastLobbyMeta') : null
+          if (raw) {
+            const meta = JSON.parse(raw) as Partial<RoomDetails> & { created_for?: string }
+            if (!meta.created_for || meta.created_for === roomId) {
+              merged = {
+                ...(merged || { id: roomId } as RoomDetails),
+                title: merged?.title ?? (meta.title ?? null),
+                vibe: merged?.vibe ?? (meta.vibe ?? null),
+                discord_url: merged?.discord_url ?? (meta.discord_url ?? null),
+                game_url: merged?.game_url ?? (meta.game_url ?? null),
+                poster_url: merged?.poster_url ?? (meta.poster_url ?? null),
+                system: merged?.system ?? (meta.system ?? null),
+                length_min: merged?.length_min ?? (meta.length_min ?? null),
+                seats: merged?.seats ?? (meta.seats ?? null),
+                welcomes_new: merged?.welcomes_new ?? (meta.welcomes_new ?? null),
+                is_mature: merged?.is_mature ?? (meta.is_mature ?? null),
+                host_id: merged?.host_id ?? (meta.host_id ?? null),
+                status: merged?.status ?? (meta.status ?? null),
+              }
+            }
+          }
+        }
+      } catch {}
+
+      if (merged) {
         setRoom(merged)
 
         // If no poster field in DB, try to auto-discover the latest upload in posters/<host_id>/live/
@@ -150,7 +183,6 @@ export default function LiveRoomPage() {
             const basePath = `${merged.host_id}/live`
             const { data: files, error } = await supabase.storage.from('posters').list(basePath, { limit: 100 })
             if (!error && files && files.length) {
-              // We named files with Date.now() prefix, so lexical desc works well
               const latest = [...files].sort((a, b) => b.name.localeCompare(a.name))[0]
               const { data: pub } = supabase.storage.from('posters').getPublicUrl(`${basePath}/${latest.name}`)
               if (pub?.publicUrl) setPosterOverride(pub.publicUrl)
@@ -227,7 +259,7 @@ export default function LiveRoomPage() {
     function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
       if (unmountedRef.current) return
 
-      if (document.visibilityState !== 'visible') {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         setRtInfo('Paused (background)')
         const once = () => {
           if (!unmountedRef.current && document.visibilityState === 'visible') {
@@ -258,7 +290,7 @@ export default function LiveRoomPage() {
       }
       if (chCleanup) chCleanup()
     }
-  }, [roomId, router])
+  }, [roomId, router, params])
 
   // Keep-alive heartbeat
   useEffect(() => {
@@ -286,7 +318,7 @@ export default function LiveRoomPage() {
     }
 
     const onVis = () => {
-      if (document.visibilityState === 'hidden') {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         paused = true
         try {
           const blob = new Blob([JSON.stringify({ room_id: roomId })], { type: 'application/json' })
@@ -298,20 +330,24 @@ export default function LiveRoomPage() {
       }
     }
 
-    document.addEventListener('visibilitychange', onVis)
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVis)
+    }
     void heartbeat()
     timer = setInterval(() => { if (!paused && mounted) void heartbeat() }, 20000)
 
     return () => {
       mounted = false
       if (timer) clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVis)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVis)
+      }
     }
   }, [me.id, roomId])
 
   async function endLobby() {
     if (!isUuid(roomId)) return
-    const ok = confirm('End this lobby for everyone?')
+    const ok = typeof window !== 'undefined' ? confirm('End this lobby for everyone?') : false
     if (!ok) return
     try {
       await supabase.rpc('end_live_room', { p_room_id: roomId })
@@ -419,7 +455,7 @@ export default function LiveRoomPage() {
 
       {/* Body */}
       <div className="relative flex-1 flex">
-        {/* FULL-WIDTH CENTERED OVERLAYED LOGO + STATUS/TIPS (moved slightly up) */}
+        {/* FULL-WIDTH CENTERED OVERLAYED LOGO + STATUS/TIPS */}
         <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
           <div className="flex flex-col items-center justify-center translate-y-[-6%] text-center px-4">
             <img
@@ -467,15 +503,15 @@ export default function LiveRoomPage() {
 
               {/* Link buttons under seats line */}
               <div className="flex items-center gap-2 flex-wrap mt-3">
-                {normalizeExternalUrl(room?.discord_url) ? (
-                  <a href={normalizeExternalUrl(room?.discord_url)!} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                {discordHref ? (
+                  <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
                     Discord
                   </a>
                 ) : (
                   <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
                 )}
-                {normalizeExternalUrl(room?.game_url) ? (
-                  <a href={normalizeExternalUrl(room?.game_url)!} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                {gameHref ? (
+                  <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
                     Game link
                   </a>
                 ) : (
