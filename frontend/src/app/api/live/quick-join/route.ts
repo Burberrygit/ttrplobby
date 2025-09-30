@@ -49,6 +49,10 @@ export async function POST(req: Request) {
     const npf = !!body.npf
     const adult = !!body.adult
 
+    // honor ?exclude=<game_id> to avoid rejoining a lobby you were just kicked from
+    const url = new URL(req.url)
+    const exclude = url.searchParams.get('exclude') || undefined
+
     // --- MATCH OPEN PUBLIC GAMES (NO INSERTS HERE) ---
     let q = supabase
       .from('live_games')
@@ -64,6 +68,7 @@ export async function POST(req: Request) {
       .order('created_at', { ascending: true })
       .limit(25)
 
+    if (exclude) q = q.neq('id', exclude)
     if (npf === true)    q = q.eq('new_player_friendly', true)
     if (adult === false) q = q.eq('is_18_plus', false)
 
@@ -84,7 +89,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ gameId: g.id }, { status: 200 })
       }
       const msg = String(joinErr?.message || '').toLowerCase()
-      if (msg.includes('game_full') || msg.includes('game_not_open')) {
+      if (msg.includes('game_full') || msg.includes('game_not_open') || msg.includes('kicked_banned')) {
         // try next candidate
         continue
       }
