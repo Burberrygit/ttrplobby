@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
@@ -30,33 +29,25 @@ type ChatMsg = {
   ts: number
 }
 
-const isUuid = (s: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
-
-const TIPS = [
-  'Share your Discord or VTT link so players can hop in quickly.',
-  'Your lobby stays open while you browse; we send a background heartbeat.',
-  'If you step away too long, consider posting availability and system details.',
-  'Mark your game New-Player-Friendly to attract more players.',
-  'Keep the seat count accurate so Open seats is correct.',
-  'Need to restart? Use “End game” and create a fresh lobby.',
-]
-
-/* Normalize user-provided external links */
+/* Normalize user-provided external links (e.g. "fvtt.life" -> "https://fvtt.life") */
 function normalizeExternalUrl(u?: string | null): string | null {
   if (!u) return null
   const s = u.trim()
   if (!s) return null
-  if (/^[a-z]+:\/\//i.test(s)) return s
-  if (s.startsWith('//')) return 'https:' + s
-  return 'https://' + s.replace(/^\/*/, '')
+  if (/^[a-z]+:\/\//i.test(s)) return s        // http://, https://, etc
+  if (s.startsWith('//')) return 'https:' + s   // protocol-relative
+  return 'https://' + s.replace(/^\/*/, '')     // default to https
 }
+
+const isUuid = (s: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
   const route = useParams()
   const roomId = typeof route?.id === 'string' ? route.id : Array.isArray(route?.id) ? route?.id?.[0] ?? '' : ''
+
   const isHost = params.get('host') === '1'
 
   const [me, setMe] = useState<{ id: string, name: string, avatar: string | null }>({ id: '', name: 'Player', avatar: null })
@@ -75,16 +66,12 @@ export default function LiveRoomPage() {
   const retryRef = useRef(0)
   const unmountedRef = useRef(false)
 
-  // Tip rotator
-  const [tipIx, setTipIx] = useState(0)
   useEffect(() => {
-    const id = setInterval(() => setTipIx(i => (i + 1) % TIPS.length), 6000)
-    return () => clearInterval(id)
-  }, [])
-
-  useEffect(() => {
+    // Do nothing until we have a valid UUID route param
     if (!isUuid(roomId)) return
     unmountedRef.current = false
+
+    let chCleanup: (() => void) | null = null
 
     ;(async () => {
       // Auth + profile
@@ -108,14 +95,18 @@ export default function LiveRoomPage() {
       ] = await Promise.all([
         supabase.from('live_rooms').select('*').eq('id', roomId).maybeSingle(),
         supabase.from('live_games')
-          .select('system,length_minutes,max_players,new_player_friendly,is_18_plus,status,discord_url,game_url,poster_url')
+          .select('system,length_minutes,max_players,new_player_friendly,is_18_plus,status')
           .eq('id', roomId)
           .maybeSingle()
       ])
 
       if (unmountedRef.current) return
-      if (roomErr && !roomRow) setErrorMsg(roomErr.message)
-      if (gameErr && !gameRow) setErrorMsg(gameErr.message)
+
+      if (roomErr && !roomRow) {
+        setErrorMsg(roomErr.message)
+      } else if (gameErr && !gameRow) {
+        setErrorMsg(gameErr.message)
+      }
 
       if (roomRow || gameRow) {
         const merged: RoomDetails = {
@@ -126,17 +117,16 @@ export default function LiveRoomPage() {
           welcomes_new: (gameRow as any)?.new_player_friendly ?? (roomRow as any)?.welcomes_new ?? null,
           is_mature: gameRow?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
           status: gameRow?.status ?? (roomRow as any)?.status ?? null,
-          discord_url: (gameRow as any)?.discord_url ?? (roomRow as any)?.discord_url ?? null,
-          game_url: (gameRow as any)?.game_url ?? (roomRow as any)?.game_url ?? null,
-          poster_url: (gameRow as any)?.poster_url ?? (roomRow as any)?.poster_url ?? null,
         }
         setRoom(merged)
       }
 
+      // Connect to realtime
       connectRealtime({ userId: user.id, name: myName, avatar: prof?.avatar_url ?? null })
     })()
 
     function connectRealtime(self: { userId: string; name: string; avatar: string | null }) {
+      // Clean any existing channel
       if (channelRef.current) {
         try { channelRef.current.unsubscribe() } catch {}
         try { supabase.removeChannel(channelRef.current) } catch {}
@@ -192,11 +182,15 @@ export default function LiveRoomPage() {
           scheduleReconnect(self)
         }
       })
+
+      // cleanup helper
+      chCleanup = () => { try { ch.unsubscribe() } catch {} }
     }
 
     function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
       if (unmountedRef.current) return
 
+      // Defer reconnect until tab/app is visible to avoid thrash on mobile lock/background
       if (document.visibilityState !== 'visible') {
         setRtInfo('Paused (background)')
         const once = () => {
@@ -212,7 +206,7 @@ export default function LiveRoomPage() {
       const tries = retryRef.current + 1
       retryRef.current = tries
       const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(tries - 1, 5))) // 1s..30s
-      setRtInfo(`Retrying in ${Math.round(delay / 1000)}s…`)
+      setRtInfo(`Retrying in ${Math.round(delay/1000)}s…`)
       setTimeout(() => {
         if (unmountedRef.current) return
         connectRealtime(self)
@@ -226,10 +220,14 @@ export default function LiveRoomPage() {
         try { supabase.removeChannel(channelRef.current) } catch {}
         channelRef.current = null
       }
+      if (chCleanup) chCleanup()
     }
   }, [roomId, router])
 
-  // Heartbeat to keep session "present" even if backgrounded / phone locks
+  // 🔴 Removed the old "auto end lobby on hide/unload" effect.
+  //    Host should end manually; backgrounding should NOT kill the room.
+
+  // ✅ Server-backed heartbeat to keep connection alive across background/lock
   useEffect(() => {
     if (!me.id || !isUuid(roomId)) return
     let mounted = true
@@ -251,7 +249,9 @@ export default function LiveRoomPage() {
           body: JSON.stringify({ room_id: roomId }),
           keepalive: true,
         })
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore noisy errors */
+      }
     }
 
     const onVis = () => {
@@ -283,8 +283,10 @@ export default function LiveRoomPage() {
     const ok = confirm('End this lobby for everyone?')
     if (!ok) return
     try {
+      // Prefer RPC (deletes DB row + storage + related presence)
       await supabase.rpc('end_live_room', { p_room_id: roomId })
     } catch {
+      // Fallback: at least remove/close room
       try {
         await supabase.from('live_rooms').delete().eq('id', roomId)
       } catch { /* ignore */ }
@@ -292,7 +294,7 @@ export default function LiveRoomPage() {
     router.push('/profile')
   }
 
-  // Chat
+  // NEW: send chat message
   function send() {
     const msgText = text.trim()
     if (!msgText) return
@@ -306,8 +308,10 @@ export default function LiveRoomPage() {
       text: msgText,
       ts: Date.now()
     }
+    // optimistic local append
     setChat(prev => [...prev, msg].slice(-200))
     setText('')
+    // fire onto the channel
     ch.send({ type: 'broadcast', event: 'chat', payload: msg })
   }
 
@@ -316,16 +320,17 @@ export default function LiveRoomPage() {
       const url = `${location.origin}/live/${roomId}`
       navigator.clipboard.writeText(url)
       alert('Lobby link copied to clipboard')
-    } catch {}
+    } catch { /* ignore */ }
   }
 
-  // Seats info
+  // 🧮 Seats display: prefer merged.seats (live_games.max_players) else "—"
   const seatCap = useMemo<number | null>(() => {
     const anyRoom = room as any
     if (room?.seats != null) return Number(room.seats)
     if (anyRoom?.max_players != null) return Number(anyRoom.max_players)
     return null
   }, [room])
+
   const openSeats = useMemo<number | null>(() => {
     return seatCap == null ? null : Math.max(0, seatCap - peers.length)
   }, [seatCap, peers.length])
@@ -342,126 +347,144 @@ export default function LiveRoomPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex flex-col text-white bg-zinc-950">
-      {/* Minimal top chrome, like /live/search */}
-      <a
-        href="/"
-        className="absolute left-1/4 top-6 -translate-x-1/2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
-      >
-        ttrplobby
-      </a>
-      <div className="absolute left-3/4 top-6 -translate-x-1/2 flex items-center gap-2">
-        <a
-          href="/profile"
-          className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
-        >
-          Profile
-        </a>
-        {isHost && (
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <a href="/" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:border-white/30">
+            <LogoIcon /><span className="font-semibold">ttrplobby</span>
+          </a>
           <div className="flex items-center gap-2">
-            <button
-              onClick={copyLobbyLink}
-              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
-            >
-              Copy link
-            </button>
-            <button
-              onClick={(e) => { e.preventDefault(); endLobby() }}
-              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur text-red-300"
-            >
-              End game
-            </button>
+            <span className={`px-2 py-1 rounded-md text-xs border ${
+              rtStatus === 'connected' ? 'border-emerald-400 text-emerald-300' :
+              rtStatus === 'connecting' ? 'border-white/20 text-white/60' :
+              'border-red-400 text-red-300'
+            }`}>
+              {rtStatus === 'connected' ? 'Connected' : rtStatus === 'connecting' ? 'Connecting…' : 'Connection issue'}
+            </span>
+            {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
+            <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Profile</a>
+            {isHost && (
+              <Menu>
+                <button onClick={copyLobbyLink} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10">Copy lobby link</button>
+                <button onClick={(e) => { e.preventDefault(); endLobby() }} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300">End game</button>
+              </Menu>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      </header>
 
-      {/* Main content — centered logo/status block */}
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="flex flex-col items-center text-center gap-4">
-          <div className="relative w-28 h-28">
-            <Image
-              src="/logo.png"
-              alt="TTRPLobby"
-              fill
-              className="animate-spin-slow object-contain"
-              priority
-            />
-          </div>
+      {/* Main lobby canvas */}
+      <main className="relative flex-1">
+        {/* Center spinning logo (COD-style focus) */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <img
+            src="/logo.png"
+            alt="TTRPLobby"
+            className="w-28 h-28 opacity-80 animate-spin-slow"
+          />
+        </div>
 
-          <h1 className="text-xl font-semibold">
-            Searching for players…
-          </h1>
-
-          {/* Live lobby stats */}
-          <p className="text-sm text-white/80 max-w-prose">
-            {room?.system || 'TTRPG'}
-            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1 : 0)}h` : ''}
-            {seatCap != null ? ` • Seats: ${seatCap}` : ''}
-            {` • In lobby: ${peers.length}`}
-            {openSeats != null ? ` • Open seats: ${openSeats}` : ''}
-            {room?.vibe ? ` • ${room.vibe}` : ''}
-          </p>
-
-          {/* Realtime connection line */}
-          <p className="text-xs text-white/60">
-            {rtStatus === 'connected'
-              ? 'Connected to lobby presence.'
-              : rtStatus === 'connecting'
-              ? 'Connecting…'
-              : rtStatus === 'error'
-              ? `Connection issue. ${rtInfo ?? ''}`
-              : 'Connection closed.'}
-          </p>
-
-          {/* Tip */}
-          <div className="mt-2 w-full max-w-md rounded-xl border border-white/10 bg-black/20 p-3">
-            <div className="text-xs uppercase tracking-wide text-white/50">Tip</div>
-            <div key={tipIx} className="mt-1 text-sm transition-opacity duration-500 ease-in-out">
-              {TIPS[tipIx]}
+        {/* Grid of “cards” around the center */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-6 grid gap-5
+                        lg:grid-cols-[320px,1fr,320px] md:grid-cols-[280px,1fr]">
+          {/* LEFT: Players */}
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-sm font-semibold">Players</div>
+            <div className="mt-2 space-y-2">
+              {peers.map(p => (
+                <div key={p.id} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <img src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`} alt="" className="h-7 w-7 rounded-full object-cover" />
+                    <div className="truncate">{p.name}</div>
+                  </div>
+                  <div className="relative">
+                    <PlayerMenu player={p} />
+                  </div>
+                </div>
+              ))}
+              {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
             </div>
           </div>
 
-          {/* Quick external links (if provided) */}
-          <div className="mt-3 flex items-center gap-3">
-            {discordHref ? (
-              <a
-                href={discordHref}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
-              >
-                Discord
-              </a>
-            ) : null}
-            {gameHref ? (
-              <a
-                href={gameHref}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 bg-black/30 backdrop-blur"
-              >
-                Game link
-              </a>
-            ) : null}
+          {/* CENTER: Match panel */}
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-6 min-h-[240px]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold">{room?.title || 'Live game lobby'}</h1>
+                <div className="text-white/70 mt-1">
+                  {room?.system || 'TTRPG'}
+                  {room?.vibe ? ` • ${room.vibe}` : ''}
+                  {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
+                </div>
+              </div>
+              <div className="text-right text-sm text-white/60">
+                <div>Seats: {seatCap ?? '—'}</div>
+                <div>In lobby: {peers.length}</div>
+                <div>Open seats: {openSeats ?? '—'}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs uppercase tracking-wide text-white/50">Status</div>
+                <div className="mt-1 text-sm">
+                  {rtStatus === 'connected'
+                    ? 'Connected to lobby presence'
+                    : rtStatus === 'connecting'
+                    ? 'Connecting…'
+                    : rtStatus === 'error'
+                    ? `Connection issue${rtInfo ? ` — ${rtInfo}` : ''}`
+                    : 'Connection closed'}
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs uppercase tracking-wide text-white/50">Links</div>
+                <div className="mt-1 flex items-center gap-2 text-sm">
+                  {normalizeExternalUrl(room?.discord_url)
+                    ? <a className="px-2 py-1 rounded-lg border border-white/20 hover:border-white/40" href={normalizeExternalUrl(room?.discord_url)!} target="_blank" rel="noreferrer">Discord</a>
+                    : <span className="px-2 py-1 rounded-lg border border-white/10 text-white/40">Discord: not set</span>}
+                  {normalizeExternalUrl(room?.game_url)
+                    ? <a className="px-2 py-1 rounded-lg border border-white/20 hover:border-white/40" href={normalizeExternalUrl(room?.game_url)!} target="_blank" rel="noreferrer">Game link</a>
+                    : <span className="px-2 py-1 rounded-lg border border-white/10 text-white/40">Game link: not set</span>}
+                </div>
+              </div>
+            </div>
+
+            {errorMsg && <div className="mt-4 text-sm text-red-400">{errorMsg}</div>}
           </div>
 
-          {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
+          {/* RIGHT: Host quick actions (if host) / poster preview */}
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 overflow-hidden">
+            <div className="p-4 border-b border-white/10">
+              <div className="text-sm font-semibold">Lobby</div>
+            </div>
+            <div className="p-4 space-y-3">
+              {isHost ? (
+                <>
+                  <button onClick={copyLobbyLink} className="w-full px-3 py-2 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                    Copy lobby link
+                  </button>
+                  <button onClick={(e) => { e.preventDefault(); endLobby() }} className="w-full px-3 py-2 rounded-lg border border-red-400/40 text-red-300 hover:border-red-300 text-sm">
+                    End game
+                  </button>
+                </>
+              ) : (
+                <div className="text-white/60 text-sm">Waiting for the host…</div>
+              )}
+            </div>
+            <div className="border-t border-white/10">
+              <img
+                src={room?.poster_url || '/game-poster-fallback.jpg'}
+                alt={room?.title || 'Live game'}
+                className="w-full h-40 object-cover"
+              />
+            </div>
+          </div>
         </div>
       </main>
 
-      {/* Pinned footer like /live/search */}
-      <footer className="border-t border-white/10 px-4">
-        <div className="max-w-4xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div>© 2025 ttrplobby</div>
-          <nav className="flex items-center gap-4">
-            <a href="/terms" className="hover:text-white">Terms</a>
-            <a href="/privacy" className="hover:text-white">Privacy</a>
-            <a href="/contact" className="hover:text-white">Contact</a>
-          </nav>
-        </div>
-      </footer>
-
-      {/* Floating chat (kept) */}
+      {/* Floating chat (bottom-right) — unchanged */}
       <ChatDock
         me={me}
         messages={chat}
@@ -524,5 +547,57 @@ function ChatDock({
         </div>
       </div>
     </div>
+  )
+}
+
+/* ---------------------------- Small UI bits ---------------------------- */
+
+function Menu({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
+      >
+        Menu ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-48 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
+          <div onClick={() => setOpen(false)}>
+            {children}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlayerMenu({ player }: { player: { id: string, name: string, avatar: string | null } }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="px-2 py-1 rounded-md border border-white/20 hover:border-white/40 text-xs"
+      >
+        ⋯
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
+          <a href="#" className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10">Send message</a>
+          <a href="#" className="block px-3 py-2 rounded-lg text-sm hover:bg-white/10">View profile</a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LogoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
   )
 }
