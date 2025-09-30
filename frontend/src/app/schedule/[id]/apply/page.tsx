@@ -13,6 +13,7 @@ type Game = {
   seats: number | null
   welcomes_new: boolean | null
   is_mature: boolean | null
+  time_zone?: string | null
 }
 
 export default function ApplyPage() {
@@ -33,7 +34,12 @@ export default function ApplyPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data, error } = await supabase.from('games').select('*').eq('id', id).single()
+        // pull a couple extra fields to help scoring
+        const { data, error } = await supabase
+          .from('games')
+          .select('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone')
+          .eq('id', id)
+          .single()
         if (error) throw error
         setGame(data as Game)
       } catch (e: any) {
@@ -43,6 +49,40 @@ export default function ApplyPage() {
       }
     })()
   }, [id])
+
+  function computeFit(g: Game, opts: { timezone: string; experience: string; playstyle: number }): number {
+    let score = 0
+
+    // ---- Experience (0–50)
+    // New gets a bonus if table is new-player friendly.
+    const exp = (opts.experience || '').toLowerCase()
+    if (exp.includes('very')) score += 45
+    else if (exp.includes('some')) score += 35
+    else {
+      score += g.welcomes_new ? 30 : 20
+      if (g.welcomes_new) score += 5 // small newbie-friendly bonus
+    }
+
+    // ---- Playstyle (0–30)
+    // Scale 1..5 → 0..30 (we don’t know GM’s preference yet; treat clarity as signal)
+    const p = Math.max(1, Math.min(5, Number(opts.playstyle) || 3))
+    score += ((p - 1) / 4) * 30
+
+    // ---- Time zone (0–20)
+    // Exact tz match gets full, otherwise partial if provided.
+    const gtz = (g.time_zone || '').trim().toLowerCase()
+    const ptz = (opts.timezone || '').trim().toLowerCase()
+    if (gtz && ptz) {
+      score += gtz === ptz ? 20 : 10
+    } else if (ptz) {
+      score += 8
+    } else {
+      score += 5 // unknown tz still gets a tiny baseline
+    }
+
+    // Clamp + round
+    return Math.max(0, Math.min(100, Math.round(score)))
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -54,11 +94,15 @@ export default function ApplyPage() {
         router.push(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
         return
       }
+      if (!game) throw new Error('Game not loaded')
+
+      const fit_score = computeFit(game, { timezone, experience, playstyle })
 
       const payload = {
         listing_id: id,
         player_id: user.id,
         status: 'under_review',
+        fit_score,
         answers: {
           timezone,
           experience,
@@ -75,7 +119,7 @@ export default function ApplyPage() {
     } catch (e: any) {
       setErrorMsg(
         e?.message?.includes('relation "applications" does not exist')
-          ? 'Applications table not found. Create it in Supabase (see docs) and try again.'
+          ? 'Applications table not found. Create it in Supabase and try again.'
           : (e?.message || 'Failed to submit application')
       )
     } finally {
