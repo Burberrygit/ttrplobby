@@ -42,6 +42,15 @@ function normalizeExternalUrl(u?: string | null): string | null {
 const isUuid = (s: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 
+const TIPS = [
+  'Share your Discord or VTT link so players can hop in quickly.',
+  'Your lobby stays open while you browse; we send a background heartbeat.',
+  'If you step away too long, consider posting availability and system details.',
+  'New to your system? Mark your game as newbie-friendly to attract players.',
+  'Keep your seat count accurate so Open seats shows correctly.',
+  'Need to restart? Use “End game” in the menu and create a fresh lobby.',
+]
+
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
@@ -65,6 +74,32 @@ export default function LiveRoomPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const retryRef = useRef(0)
   const unmountedRef = useRef(false)
+
+  // Tip rotator
+  const [tipIdx, setTipIdx] = useState(0)
+  useEffect(() => {
+    let mounted = true
+    let timer: ReturnType<typeof setInterval> | null = null
+    const tick = () => setTipIdx(i => (i + 1) % TIPS.length)
+    const start = () => {
+      if (timer) return
+      timer = setInterval(tick, 6000)
+    }
+    const stop = () => {
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+    const onVis = () => (document.visibilityState === 'visible' ? start() : stop())
+    document.addEventListener('visibilitychange', onVis)
+    if (mounted) start()
+    return () => {
+      mounted = false
+      stop()
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [])
 
   useEffect(() => {
     // Do nothing until we have a valid UUID route param
@@ -373,49 +408,9 @@ export default function LiveRoomPage() {
         </div>
       </header>
 
-      {/* Hero / Poster + quick links */}
-      <section className="max-w-6xl mx-auto px-4 py-6 grid md:grid-cols-[360px,1fr] gap-5">
-        <div className="rounded-2xl border border-white/10 overflow-hidden bg-zinc-900/60">
-          <img
-            src={room?.poster_url || '/game-poster-fallback.jpg'}
-            alt={room?.title || 'Live game'}
-            className="w-full h-56 object-cover"
-          />
-          <div className="p-3 text-sm text-white/70 border-t border-white/10 flex items-center gap-3 flex-wrap">
-            {discordHref ? (
-              <a href={discordHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
-                <span>Discord</span>
-              </a>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
-            )}
-            {gameHref ? (
-              <a href={gameHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
-                <span>Game link</span>
-              </a>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Game link: not set</span>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-5">
-          <h1 className="text-2xl font-bold">{room?.title || 'Untitled live game'}</h1>
-          <div className="text-white/70 mt-1">
-            {room?.system || 'TTRPG'}
-            {room?.vibe ? ` • ${room.vibe}` : ''}
-            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
-          </div>
-          <div className="text-white/60 text-sm mt-2">
-            Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
-          </div>
-          {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
-        </div>
-      </section>
-
-      {/* Participants & Notes */}
-      <section className="max-w-6xl mx-auto px-4 pb-16 grid md:grid-cols-[260px,1fr] gap-5">
-        {/* Participants list */}
+      {/* New centered layout with spinning logo */}
+      <section className="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+        {/* LEFT: Participants */}
         <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
           <div className="text-sm font-semibold">Players</div>
           <div className="mt-2 space-y-2">
@@ -434,10 +429,80 @@ export default function LiveRoomPage() {
           </div>
         </div>
 
-        {/* Main area placeholder */}
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 min-h-[200px]">
-          <div className="text-sm text-white/70">
-            Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
+        {/* CENTER: Spinning logo + status + tips */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-6 flex flex-col items-center text-center">
+          <img
+            src="/logo.png"
+            alt="ttrplobby"
+            className="h-28 w-28 motion-safe:animate-spin"
+            style={{ animationDuration: '8s' }}
+          />
+          <h2 className="text-xl font-semibold mt-4">Searching for players…</h2>
+          <div className="text-white/60 text-sm mt-1">
+            {room?.system || 'TTRPG'}
+            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
+            {seatCap != null ? ` • Seats: ${seatCap}` : ''}
+            {` • In lobby: ${peers.length}`}
+            {openSeats != null ? ` • Open seats: ${openSeats}` : ''}
+          </div>
+
+          <div className="mt-5 text-xs uppercase tracking-wide text-white/40">Tip</div>
+          <div className="mt-1 text-white/80">{TIPS[tipIdx]}</div>
+
+          {errorMsg && <div className="mt-4 text-sm text-red-400">{errorMsg}</div>}
+        </div>
+
+        {/* RIGHT: Game info + poster + quick links */}
+        <div className="rounded-2xl border border-white/10 overflow-hidden bg-zinc-900/60">
+          <img
+            src={room?.poster_url || '/game-poster-fallback.jpg'}
+            alt={room?.title || 'Live game'}
+            className="w-full h-44 object-cover"
+          />
+          <div className="p-5">
+            <h1 className="text-xl font-bold">{room?.title || 'Untitled live game'}</h1>
+            <div className="text-white/70 mt-1">
+              {room?.system || 'TTRPG'}
+              {room?.vibe ? ` • ${room.vibe}` : ''}
+              {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
+            </div>
+            <div className="text-white/60 text-sm mt-2">
+              Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {discordHref ? (
+                <a href={discordHref} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/20 hover:border-white/40">
+                  <span>Discord</span>
+                </a>
+              ) : (
+                <span className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
+              )}
+              {gameHref ? (
+                <a href={gameHref} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/20 hover:border-white/40">
+                  <span>Game link</span>
+                </a>
+              ) : (
+                <span className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Game link: not set</span>
+              )}
+            </div>
+
+            {isHost && (
+              <div className="mt-4">
+                <button
+                  onClick={copyLobbyLink}
+                  className="w-full px-3 py-2 rounded-lg border border-white/20 hover:border-white/40"
+                >
+                  Copy lobby link
+                </button>
+                <button
+                  onClick={(e) => { e.preventDefault(); endLobby() }}
+                  className="mt-2 w-full px-3 py-2 rounded-lg border border-white/20 hover:border-white/40 text-red-300"
+                >
+                  End game
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
