@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 type Body = {
   system: string
@@ -22,11 +22,11 @@ export async function POST(req: Request) {
     if (!auth.startsWith('Bearer ')) {
       return NextResponse.json({ step: 'auth', error: 'Not authenticated' }, { status: 401 })
     }
-    if (!URL || !KEY) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return NextResponse.json({ step: 'env', error: 'missing_supabase_env' }, { status: 500 })
     }
 
-    const supabase = createClient(URL, KEY, { global: { headers: { Authorization: auth } } })
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: auth } } })
     const { data: { user }, error: uErr } = await supabase.auth.getUser()
     if (uErr || !user) {
       return NextResponse.json({ step: 'auth', error: 'No user' }, { status: 401 })
@@ -50,8 +50,8 @@ export async function POST(req: Request) {
     const adult = !!body.adult
 
     // honor ?exclude=<game_id> to avoid rejoining a lobby you were just kicked from
-    const url = new URL(req.url)
-    const exclude = url.searchParams.get('exclude') || undefined
+    const requestUrl = new URL(req.url)
+    const exclude = requestUrl.searchParams.get('exclude') || undefined
 
     // --- MATCH OPEN PUBLIC GAMES (NO INSERTS HERE) ---
     let q = supabase
@@ -110,4 +110,5 @@ export async function GET() {
     headers: { Allow: 'POST' },
   })
 }
+
 
