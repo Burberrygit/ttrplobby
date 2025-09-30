@@ -1,4 +1,3 @@
-// File: frontend/src/app/live/[id]/page.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -172,9 +171,23 @@ export default function LiveRoomPage() {
 
     function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
       if (unmountedRef.current) return
+
+      // Defer reconnect until tab/app is visible to avoid thrash on mobile lock/background
+      if (document.visibilityState !== 'visible') {
+        setRtInfo('Paused (background)')
+        const once = () => {
+          if (!unmountedRef.current && document.visibilityState === 'visible') {
+            document.removeEventListener('visibilitychange', once)
+            connectRealtime(self)
+          }
+        }
+        document.addEventListener('visibilitychange', once)
+        return
+      }
+
       const tries = retryRef.current + 1
       retryRef.current = tries
-      const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(tries - 1, 5))) // 1s,2s,4s,8s,16s,32s
+      const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(tries - 1, 5))) // 1s..30s
       setRtInfo(`Retrying in ${Math.round(delay/1000)}s…`)
       setTimeout(() => {
         if (unmountedRef.current) return
@@ -193,38 +206,58 @@ export default function LiveRoomPage() {
     }
   }, [roomId, router])
 
-  // Presence heartbeat → populate /live_presence map (best-effort)
+  // 🔴 Removed the old "auto end lobby on hide/unload" effect.
+  //    Host should end manually; backgrounding should NOT kill the room.
+
+  // ✅ Server-backed heartbeat to keep connection alive across background/lock
   useEffect(() => {
     if (!me.id || !isUuid(roomId)) return
     let mounted = true
-    let timer: any
+    let timer: ReturnType<typeof setInterval> | null = null
+    let paused = false
 
-    async function pingOnce() {
+    async function heartbeat() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user || !mounted || !isUuid(roomId)) return
-        navigator.geolocation.getCurrentPosition(async (pos) => {
-          if (!mounted) return
-          const lat = pos.coords.latitude
-          const lon = pos.coords.longitude
-          await supabase.from('live_presence').upsert(
-            {
-              user_id: user.id,
-              room_id: roomId,
-              lat, lon,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'user_id,room_id' }
-          )
-        }, () => {
-          // silently ignore if permission denied
-        }, { maximumAge: 60_000, timeout: 10_000 })
-      } catch { /* ignore */ }
+        if (!mounted) return
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) return
+        await fetch('/api/live/heartbeat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ room_id: roomId }),
+          keepalive: true,
+        })
+      } catch {
+        /* ignore noisy errors */
+      }
     }
 
-    void pingOnce()
-    timer = setInterval(pingOnce, 30_000)
-    return () => { mounted = false; clearInterval(timer) }
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        paused = true
+        try {
+          const blob = new Blob([JSON.stringify({ room_id: roomId })], { type: 'application/json' })
+          navigator.sendBeacon('/api/live/heartbeat', blob)
+        } catch {}
+      } else {
+        paused = false
+        void heartbeat()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVis)
+    void heartbeat()
+    timer = setInterval(() => { if (!paused && mounted) void heartbeat() }, 20000)
+
+    return () => {
+      mounted = false
+      if (timer) clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [me.id, roomId])
 
   async function endLobby() {
@@ -264,27 +297,6 @@ export default function LiveRoomPage() {
     ch.send({ type: 'broadcast', event: 'chat', payload: msg })
   }
 
-  // Best-effort automatic cleanup when the HOST leaves the page/tab
-  useEffect(() => {
-    if (!isHost || !isUuid(roomId)) return
-
-    const handler = () => {
-      // fire-and-forget; cron backstops if the browser cuts the request
-      void supabase.rpc('end_live_room', { p_room_id: roomId })
-    }
-
-    window.addEventListener('beforeunload', handler)
-    const vis = () => { if (document.hidden) handler() }
-    document.addEventListener('visibilitychange', vis)
-
-    // Also try on unmount (route change in SPA)
-    return () => {
-      window.removeEventListener('beforeunload', handler)
-      document.removeEventListener('visibilitychange', vis)
-      handler()
-    }
-  }, [isHost, roomId])
-
   function copyLobbyLink() {
     try {
       const url = `${location.origin}/live/${roomId}`
@@ -293,11 +305,17 @@ export default function LiveRoomPage() {
     } catch { /* ignore */ }
   }
 
-  const remainSeats = useMemo(() => {
-    const cap = room?.seats ?? 0
-    const used = peers.length
-    return Math.max(0, cap - used)
-  }, [room?.seats, peers.length])
+  // 🧮 Seats display: prefer room.seats; fallback to room.max_players if present; otherwise "—"
+  const seatCap = useMemo<number | null>(() => {
+    const anyRoom = room as any
+    if (room?.seats != null) return room.seats
+    if (anyRoom?.max_players != null) return Number(anyRoom.max_players)
+    return null
+  }, [room])
+
+  const openSeats = useMemo<number | null>(() => {
+    return seatCap == null ? null : Math.max(0, seatCap - peers.length)
+  }, [seatCap, peers.length])
 
   const discordHref = normalizeExternalUrl(room?.discord_url)
   const gameHref = normalizeExternalUrl(room?.game_url)
@@ -371,7 +389,7 @@ export default function LiveRoomPage() {
             {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
           </div>
           <div className="text-white/60 text-sm mt-2">
-            Seats: {room?.seats ?? '—'} • In lobby: {peers.length} • Open seats: {Math.max(0, (room?.seats ?? 0) - peers.length)}
+            Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
           </div>
           {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
         </div>
