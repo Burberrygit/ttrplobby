@@ -347,13 +347,27 @@ export default function LiveRoomPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-950 text-white relative isolate overflow-hidden">
+
+      {/* ----------  ambient background gradient  ---------- */}
+      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950" />
+
+      {/* ----------  central rotating logo  ---------- */}
+      <div className="fixed inset-0 grid place-items-center pointer-events-none">
+        <img
+          src="/logo.png"
+          alt="ttrplobby"
+          className="w-64 h-64 md:w-80 md:h-80 opacity-10 animate-[spin_20s_linear_infinite]"
+        />
+      </div>
+
+      {/* ----------  original header  ---------- */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/70 backdrop-blur">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <a href="/" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:border-white/30">
             <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
+
           <div className="flex items-center gap-2">
             <span className={`px-2 py-1 rounded-md text-xs border ${
               rtStatus === 'connected' ? 'border-emerald-400 text-emerald-300' :
@@ -363,7 +377,7 @@ export default function LiveRoomPage() {
               {rtStatus === 'connected' ? 'Connected' : rtStatus === 'connecting' ? 'Connecting…' : 'Connection issue'}
             </span>
             {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
-            <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Profile</a>
+            <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Back to profile</a>
             {isHost && (
               <Menu>
                 <button onClick={copyLobbyLink} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10">Copy lobby link</button>
@@ -374,117 +388,78 @@ export default function LiveRoomPage() {
         </div>
       </header>
 
-      {/* Main lobby canvas */}
-      <main className="relative flex-1">
-        {/* Center spinning logo (COD-style focus) */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      {/* ----------  hero card grid  ---------- */}
+      <section className="max-w-6xl mx-auto px-4 py-6 grid md:grid-cols-[360px,1fr] gap-5">
+        {/* poster + quick links */}
+        <div className="rounded-2xl border border-white/10 overflow-hidden bg-zinc-900/60 backdrop-blur">
           <img
-            src="/logo.png"
-            alt="TTRPLobby"
-            className="w-28 h-28 opacity-80 animate-spin-slow"
+            src={room?.poster_url || '/game-poster-fallback.jpg'}
+            alt={room?.title || 'Live game'}
+            className="w-full h-56 object-cover"
           />
-        </div>
-
-        {/* Grid of “cards” around the center */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 py-6 grid gap-5
-                        lg:grid-cols-[320px,1fr,320px] md:grid-cols-[280px,1fr]">
-          {/* LEFT: Players */}
-          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
-            <div className="text-sm font-semibold">Players</div>
-            <div className="mt-2 space-y-2">
-              {peers.map(p => (
-                <div key={p.id} className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <img src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`} alt="" className="h-7 w-7 rounded-full object-cover" />
-                    <div className="truncate">{p.name}</div>
-                  </div>
-                  <div className="relative">
-                    <PlayerMenu player={p} />
-                  </div>
-                </div>
-              ))}
-              {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
-            </div>
-          </div>
-
-          {/* CENTER: Match panel */}
-          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-6 min-h-[240px]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl font-bold">{room?.title || 'Live game lobby'}</h1>
-                <div className="text-white/70 mt-1">
-                  {room?.system || 'TTRPG'}
-                  {room?.vibe ? ` • ${room.vibe}` : ''}
-                  {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
-                </div>
-              </div>
-              <div className="text-right text-sm text-white/60">
-                <div>Seats: {seatCap ?? '—'}</div>
-                <div>In lobby: {peers.length}</div>
-                <div>Open seats: {openSeats ?? '—'}</div>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs uppercase tracking-wide text-white/50">Status</div>
-                <div className="mt-1 text-sm">
-                  {rtStatus === 'connected'
-                    ? 'Connected to lobby presence'
-                    : rtStatus === 'connecting'
-                    ? 'Connecting…'
-                    : rtStatus === 'error'
-                    ? `Connection issue${rtInfo ? ` — ${rtInfo}` : ''}`
-                    : 'Connection closed'}
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-xs uppercase tracking-wide text-white/50">Links</div>
-                <div className="mt-1 flex items-center gap-2 text-sm">
-                  {normalizeExternalUrl(room?.discord_url)
-                    ? <a className="px-2 py-1 rounded-lg border border-white/20 hover:border-white/40" href={normalizeExternalUrl(room?.discord_url)!} target="_blank" rel="noreferrer">Discord</a>
-                    : <span className="px-2 py-1 rounded-lg border border-white/10 text-white/40">Discord: not set</span>}
-                  {normalizeExternalUrl(room?.game_url)
-                    ? <a className="px-2 py-1 rounded-lg border border-white/20 hover:border-white/40" href={normalizeExternalUrl(room?.game_url)!} target="_blank" rel="noreferrer">Game link</a>
-                    : <span className="px-2 py-1 rounded-lg border border-white/10 text-white/40">Game link: not set</span>}
-                </div>
-              </div>
-            </div>
-
-            {errorMsg && <div className="mt-4 text-sm text-red-400">{errorMsg}</div>}
-          </div>
-
-          {/* RIGHT: Host quick actions (if host) / poster preview */}
-          <div className="rounded-2xl border border-white/10 bg-zinc-900/60 overflow-hidden">
-            <div className="p-4 border-b border-white/10">
-              <div className="text-sm font-semibold">Lobby</div>
-            </div>
-            <div className="p-4 space-y-3">
-              {isHost ? (
-                <>
-                  <button onClick={copyLobbyLink} className="w-full px-3 py-2 rounded-lg border border-white/20 hover:border-white/40 text-sm">
-                    Copy lobby link
-                  </button>
-                  <button onClick={(e) => { e.preventDefault(); endLobby() }} className="w-full px-3 py-2 rounded-lg border border-red-400/40 text-red-300 hover:border-red-300 text-sm">
-                    End game
-                  </button>
-                </>
-              ) : (
-                <div className="text-white/60 text-sm">Waiting for the host…</div>
-              )}
-            </div>
-            <div className="border-t border-white/10">
-              <img
-                src={room?.poster_url || '/game-poster-fallback.jpg'}
-                alt={room?.title || 'Live game'}
-                className="w-full h-40 object-cover"
-              />
-            </div>
+          <div className="p-3 text-sm text-white/70 border-t border-white/10 flex items-center gap-3 flex-wrap">
+            {discordHref ? (
+              <a href={discordHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                <span>Discord</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
+            )}
+            {gameHref ? (
+              <a href={gameHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
+                <span>Game link</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Game link: not set</span>
+            )}
           </div>
         </div>
-      </main>
 
-      {/* Floating chat (bottom-right) — unchanged */}
+        {/* meta block */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-5">
+          <h1 className="text-2xl font-bold">{room?.title || 'Untitled live game'}</h1>
+          <div className="text-white/70 mt-1">
+            {room?.system || 'TTRPG'}
+            {room?.vibe ? ` • ${room.vibe}` : ''}
+            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
+          </div>
+          <div className="text-white/60 text-sm mt-2">
+            Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
+          </div>
+          {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
+        </div>
+      </section>
+
+      {/* ----------  participants & notes  ---------- */}
+      <section className="max-w-6xl mx-auto px-4 pb-16 grid md:grid-cols-[260px,1fr] gap-5">
+        {/* players list */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-4">
+          <div className="text-sm font-semibold">Players</div>
+          <div className="mt-2 space-y-2">
+            {peers.map(p => (
+              <div key={p.id} className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <img src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`} alt="" className="h-7 w-7 rounded-full object-cover" />
+                  <div className="truncate">{p.name}</div>
+                </div>
+                <div className="relative">
+                  <PlayerMenu player={p} />
+                </div>
+              </div>
+            ))}
+            {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
+          </div>
+        </div>
+
+        {/* main placeholder */}
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-4 min-h-[200px]">
+          <div className="text-sm text-white/70">
+            Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
+          </div>
+        </div>
+      </section>
+
+      {/* ----------  original floating chat dock (unchanged)  ---------- */}
       <ChatDock
         me={me}
         messages={chat}
@@ -492,11 +467,6 @@ export default function LiveRoomPage() {
         value={text}
         onChange={setText}
       />
-
-      <style jsx global>{`
-        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spin-slow 2.5s linear infinite; }
-      `}</style>
     </div>
   )
 }
