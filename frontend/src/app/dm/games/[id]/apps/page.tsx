@@ -19,20 +19,16 @@ type AppRow = {
   id: string
   listing_id: string
   player_id: string
-  status: string
+  status: 'under_review' | 'accepted' | 'declined' | string
   fit_score?: number | null
   answers?: any
   created_at: string
 }
 
-const COLUMNS: { key: string; label: string }[] = [
+const COLUMNS: { key: 'under_review' | 'accepted' | 'declined'; label: string }[] = [
   { key: 'under_review', label: 'Under Review' },
-  { key: 'interview', label: 'Interview' },
-  { key: 'offered', label: 'Offered' },
   { key: 'accepted', label: 'Accepted' },
-  { key: 'waitlisted', label: 'Waitlisted' },
   { key: 'declined', label: 'Declined' },
-  { key: 'withdrawn', label: 'Withdrawn' },
 ]
 
 export default function DMAppsPage() {
@@ -73,6 +69,7 @@ export default function DMAppsPage() {
           .from('applications')
           .select('id, listing_id, player_id, status, fit_score, answers, created_at')
           .eq('listing_id', id)
+          .in('status', ['under_review', 'accepted', 'declined'])
           .order('created_at', { ascending: true })
         if (error) throw error
         setApps((rows || []) as AppRow[])
@@ -84,11 +81,58 @@ export default function DMAppsPage() {
     })()
   }, [me, id])
 
+  // Realtime: keep columns in sync when an application is accepted/declined
+  useEffect(() => {
+    if (!me) return
+    const channel = supabase
+      .channel(`apps-listing-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'applications', filter: `listing_id=eq.${id}` },
+        (payload) => {
+          const row = payload.new as AppRow
+          if (!['under_review', 'accepted', 'declined'].includes(row.status)) return
+          setApps(prev => {
+            const idx = prev.findIndex(a => a.id === row.id)
+            if (idx === -1) return [...prev, row]
+            const copy = [...prev]
+            copy[idx] = { ...copy[idx], ...row }
+            return copy
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'applications', filter: `listing_id=eq.${id}` },
+        (payload) => {
+          const row = payload.new as AppRow
+          if (!['under_review', 'accepted', 'declined'].includes(row.status)) {
+            // If it moved out of our three statuses, remove it from local state
+            setApps(prev => prev.filter(a => a.id !== row.id))
+            return
+          }
+          setApps(prev => {
+            const idx = prev.findIndex(a => a.id === row.id)
+            if (idx === -1) return [...prev, row]
+            const copy = [...prev]
+            copy[idx] = { ...copy[idx], ...row }
+            return copy
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [me, id])
+
   const grouped = useMemo(() => {
-    const m: Record<string, AppRow[]> = {}
-    COLUMNS.forEach(c => (m[c.key] = []))
+    const m: Record<string, AppRow[]> = { under_review: [], accepted: [], declined: [] }
     for (const a of apps) {
-      (m[a.status] = m[a.status] || []).push(a)
+      if (a.status === 'under_review' || a.status === 'accepted' || a.status === 'declined') {
+        m[a.status].push(a)
+      }
     }
     return m
   }, [apps])
@@ -112,11 +156,11 @@ export default function DMAppsPage() {
         {errorMsg && <div className="mt-4 text-sm text-red-400">{errorMsg}</div>}
 
         {loading ? (
-          <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-40 rounded-xl border border-white/10 bg-white/5 animate-pulse" />)}
+          <div className="grid md:grid-cols-3 gap-4 mt-6">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-40 rounded-xl border border-white/10 bg-white/5 animate-pulse" />)}
           </div>
         ) : (
-          <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
+          <div className="grid md:grid-cols-3 gap-4 mt-6">
             {COLUMNS.map(col => (
               <section key={col.key} className="rounded-2xl border border-white/10 bg-zinc-900/60">
                 <header className="px-3 py-2 border-b border-white/10 flex items-center justify-between">
@@ -158,3 +202,4 @@ function AppCard({ a, gameId }: { a: AppRow, gameId: string }) {
     </a>
   )
 }
+
