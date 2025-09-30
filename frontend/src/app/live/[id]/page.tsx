@@ -67,7 +67,6 @@ export default function LiveRoomPage() {
   const unmountedRef = useRef(false)
 
   useEffect(() => {
-    // Do nothing until we have a valid UUID route param
     if (!isUuid(roomId)) return
     unmountedRef.current = false
 
@@ -126,7 +125,6 @@ export default function LiveRoomPage() {
     })()
 
     function connectRealtime(self: { userId: string; name: string; avatar: string | null }) {
-      // Clean any existing channel
       if (channelRef.current) {
         try { channelRef.current.unsubscribe() } catch {}
         try { supabase.removeChannel(channelRef.current) } catch {}
@@ -190,7 +188,6 @@ export default function LiveRoomPage() {
     function scheduleReconnect(self: { userId: string; name: string; avatar: string | null }) {
       if (unmountedRef.current) return
 
-      // Defer reconnect until tab/app is visible to avoid thrash on mobile lock/background
       if (document.visibilityState !== 'visible') {
         setRtInfo('Paused (background)')
         const once = () => {
@@ -224,10 +221,7 @@ export default function LiveRoomPage() {
     }
   }, [roomId, router])
 
-  // 🔴 Removed the old "auto end lobby on hide/unload" effect.
-  //    Host should end manually; backgrounding should NOT kill the room.
-
-  // ✅ Server-backed heartbeat to keep connection alive across background/lock
+  // Keep-alive heartbeat
   useEffect(() => {
     if (!me.id || !isUuid(roomId)) return
     let mounted = true
@@ -249,9 +243,7 @@ export default function LiveRoomPage() {
           body: JSON.stringify({ room_id: roomId }),
           keepalive: true,
         })
-      } catch {
-        /* ignore noisy errors */
-      }
+      } catch {}
     }
 
     const onVis = () => {
@@ -283,18 +275,15 @@ export default function LiveRoomPage() {
     const ok = confirm('End this lobby for everyone?')
     if (!ok) return
     try {
-      // Prefer RPC (deletes DB row + storage + related presence)
       await supabase.rpc('end_live_room', { p_room_id: roomId })
     } catch {
-      // Fallback: at least remove/close room
       try {
         await supabase.from('live_rooms').delete().eq('id', roomId)
-      } catch { /* ignore */ }
+      } catch {}
     }
     router.push('/profile')
   }
 
-  // NEW: send chat message
   function send() {
     const msgText = text.trim()
     if (!msgText) return
@@ -308,10 +297,8 @@ export default function LiveRoomPage() {
       text: msgText,
       ts: Date.now()
     }
-    // optimistic local append
     setChat(prev => [...prev, msg].slice(-200))
     setText('')
-    // fire onto the channel
     ch.send({ type: 'broadcast', event: 'chat', payload: msg })
   }
 
@@ -320,10 +307,10 @@ export default function LiveRoomPage() {
       const url = `${location.origin}/live/${roomId}`
       navigator.clipboard.writeText(url)
       alert('Lobby link copied to clipboard')
-    } catch { /* ignore */ }
+    } catch {}
   }
 
-  // 🧮 Seats display: prefer merged.seats (live_games.max_players) else "—"
+  // Seats
   const seatCap = useMemo<number | null>(() => {
     const anyRoom = room as any
     if (room?.seats != null) return Number(room.seats)
@@ -340,34 +327,20 @@ export default function LiveRoomPage() {
 
   if (!isUuid(roomId)) {
     return (
-      <div className="min-h-screen bg-zinc-950 text-white grid place-items-center">
+      <div className="min-h-screen bg-black text-white grid place-items-center">
         <div className="text-white/60 text-sm">Setting up lobby…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white relative isolate overflow-hidden">
-
-      {/* ----------  ambient background gradient  ---------- */}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950" />
-
-      {/* ----------  central rotating logo  ---------- */}
-      <div className="fixed inset-0 grid place-items-center pointer-events-none">
-        <img
-          src="/logo.png"
-          alt="ttrplobby"
-          className="w-64 h-64 md:w-80 md:h-80 opacity-10 animate-[spin_20s_linear_infinite]"
-        />
-      </div>
-
-      {/* ----------  original header  ---------- */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-zinc-950/70 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-black text-white flex flex-col">
+      {/* Header (kept) */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/70 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <a href="/" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:border-white/30">
             <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
-
           <div className="flex items-center gap-2">
             <span className={`px-2 py-1 rounded-md text-xs border ${
               rtStatus === 'connected' ? 'border-emerald-400 text-emerald-300' :
@@ -377,7 +350,6 @@ export default function LiveRoomPage() {
               {rtStatus === 'connected' ? 'Connected' : rtStatus === 'connecting' ? 'Connecting…' : 'Connection issue'}
             </span>
             {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
-            <a href="/profile" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">Back to profile</a>
             {isHost && (
               <Menu>
                 <button onClick={copyLobbyLink} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10">Copy lobby link</button>
@@ -388,78 +360,91 @@ export default function LiveRoomPage() {
         </div>
       </header>
 
-      {/* ----------  hero card grid  ---------- */}
-      <section className="max-w-6xl mx-auto px-4 py-6 grid md:grid-cols-[360px,1fr] gap-5">
-        {/* poster + quick links */}
-        <div className="rounded-2xl border border-white/10 overflow-hidden bg-zinc-900/60 backdrop-blur">
-          <img
-            src={room?.poster_url || '/game-poster-fallback.jpg'}
-            alt={room?.title || 'Live game'}
-            className="w-full h-56 object-cover"
-          />
-          <div className="p-3 text-sm text-white/70 border-t border-white/10 flex items-center gap-3 flex-wrap">
-            {discordHref ? (
-              <a href={discordHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
-                <span>Discord</span>
-              </a>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Discord: not set</span>
-            )}
-            {gameHref ? (
-              <a href={gameHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40">
-                <span>Game link</span>
-              </a>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-white/40 cursor-not-allowed">Game link: not set</span>
-            )}
-          </div>
-        </div>
+      {/* Body */}
+      <div className="relative flex-1 flex">
+        {/* LEFT: Single consolidated card */}
+        <aside className="w-full max-w-[380px] p-4">
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/70 backdrop-blur p-4 space-y-4">
+            {/* Links */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {discordHref ? (
+                <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                  Discord
+                </a>
+              ) : (
+                <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
+              )}
+              {gameHref ? (
+                <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                  Game link
+                </a>
+              ) : (
+                <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Game link: not set</span>
+              )}
+            </div>
 
-        {/* meta block */}
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-5">
-          <h1 className="text-2xl font-bold">{room?.title || 'Untitled live game'}</h1>
-          <div className="text-white/70 mt-1">
-            {room?.system || 'TTRPG'}
-            {room?.vibe ? ` • ${room.vibe}` : ''}
-            {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1:0)}h` : ''}
-          </div>
-          <div className="text-white/60 text-sm mt-2">
-            Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
-          </div>
-          {errorMsg && <div className="mt-3 text-sm text-red-400">{errorMsg}</div>}
-        </div>
-      </section>
-
-      {/* ----------  participants & notes  ---------- */}
-      <section className="max-w-6xl mx-auto px-4 pb-16 grid md:grid-cols-[260px,1fr] gap-5">
-        {/* players list */}
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-4">
-          <div className="text-sm font-semibold">Players</div>
-          <div className="mt-2 space-y-2">
-            {peers.map(p => (
-              <div key={p.id} className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <img src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`} alt="" className="h-7 w-7 rounded-full object-cover" />
-                  <div className="truncate">{p.name}</div>
-                </div>
-                <div className="relative">
-                  <PlayerMenu player={p} />
-                </div>
+            {/* Title + meta */}
+            <div>
+              <div className="text-xs uppercase tracking-wide text-white/50">Live game</div>
+              <h1 className="text-xl font-bold mt-1">{room?.title || 'Untitled live game'}</h1>
+              <div className="text-white/70 mt-1">
+                {room?.system || 'TTRPG'}
+                {room?.vibe ? ` • ${room.vibe}` : ''}
+                {room?.length_min ? ` • ${(room.length_min/60).toFixed(room.length_min % 60 ? 1 : 0)}h` : ''}
               </div>
-            ))}
-            {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
-          </div>
-        </div>
+              <div className="text-white/60 text-sm mt-2">
+                Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
+              </div>
+              {errorMsg && <div className="mt-2 text-sm text-red-400">{errorMsg}</div>}
+            </div>
 
-        {/* main placeholder */}
-        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur p-4 min-h-[200px]">
-          <div className="text-sm text-white/70">
-            Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
-          </div>
-        </div>
-      </section>
+            <hr className="border-white/10" />
 
-      {/* ----------  original floating chat dock (unchanged)  ---------- */}
+            {/* Players */}
+            <div>
+              <div className="text-sm font-semibold mb-2">Players</div>
+              <div className="space-y-2">
+                {peers.map(p => (
+                  <div key={p.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=0B0B0E&color=FFFFFF`}
+                        alt=""
+                        className="h-7 w-7 rounded-full object-cover"
+                      />
+                      <div className="truncate">{p.name}</div>
+                    </div>
+                    <div className="relative">
+                      <PlayerMenu player={p} />
+                    </div>
+                  </div>
+                ))}
+                {peers.length === 0 && <div className="text-white/50 text-sm">No one here yet.</div>}
+              </div>
+            </div>
+
+            <hr className="border-white/10" />
+
+            {/* Note */}
+            <div className="text-sm text-white/70">
+              Share your Discord or VTT link above. Use chat to coordinate start time and seating. When you’re ready, click the link to move everyone over.
+            </div>
+          </div>
+        </aside>
+
+        {/* CENTER: Rotating logo */}
+        <main className="relative flex-1 grid place-items-center">
+          <div className="pointer-events-none text-center">
+            <img
+              src="/logo.png"
+              alt="TTRPLobby"
+              className="w-28 h-28 opacity-80 animate-spin-slow mx-auto"
+            />
+          </div>
+        </main>
+      </div>
+
+      {/* Floating chat (bottom-right) */}
       <ChatDock
         me={me}
         messages={chat}
@@ -467,6 +452,11 @@ export default function LiveRoomPage() {
         value={text}
         onChange={setText}
       />
+
+      <style jsx global>{`
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin-slow 2.5s linear infinite; }
+      `}</style>
     </div>
   )
 }
