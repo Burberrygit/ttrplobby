@@ -1,4 +1,3 @@
-// File: frontend/src/app/profile/page.tsx
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -32,6 +31,9 @@ export default function ProfileDashboard() {
   const [joinedCount, setJoinedCount] = useState<number>(0)
   const [games, setGames] = useState<Game[]>([])
   const [gamesLoading, setGamesLoading] = useState(true)
+
+  // NEW: notifications count
+  const [noteCount, setNoteCount] = useState<number>(0)
 
   // Account menu
   const [menuOpen, setMenuOpen] = useState(false)
@@ -67,6 +69,18 @@ export default function ProfileDashboard() {
         setUsername(p.username ?? '')
         setBio(p.bio ?? '')
         setAvatarUrl(p.avatar_url ?? '')
+      }
+
+      // NEW: unread notifications count
+      try {
+        const { count } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('read', false)
+        if (mounted) setNoteCount(count ?? 0)
+      } catch {
+        // ignore if table not present yet
       }
 
       // load games (hosted + joined)
@@ -151,7 +165,7 @@ export default function ProfileDashboard() {
     return (
       <div className="min-h-screen flex flex-col text-white">
         <main className="flex-1 max-w-6xl mx-auto px-4 py-8">
-          <TopBanner />
+          <TopBanner noteCount={noteCount} />
           <SkeletonProfileCard />
         </main>
         <footer className="border-t border-white/10 px-6">
@@ -171,8 +185,8 @@ export default function ProfileDashboard() {
   return (
     <div className="min-h-screen flex flex-col text-white">
       <main className="flex-1 max-w-6xl mx-auto px-4 py-8">
-        {/* 1) Top banner → home */}
-        <TopBanner />
+        {/* 1) Top banner → home + notifications */}
+        <TopBanner noteCount={noteCount} />
 
         {/* Header / Profile Card */}
         <div className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-800">
@@ -267,7 +281,7 @@ export default function ProfileDashboard() {
             <h2 className="text-lg font-semibold">Your games</h2>
           </div>
 
-          {gamesLoading ? (
+        {gamesLoading ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="rounded-2xl border border-white/10 bg-white/5 h-52 animate-pulse" />
@@ -325,15 +339,26 @@ export default function ProfileDashboard() {
 
 /* --------------------------------- UI bits -------------------------------- */
 
-function TopBanner() {
+function TopBanner({ noteCount = 0 }: { noteCount?: number }) {
   return (
-    <div className="mb-4">
+    <div className="mb-4 flex items-center justify-between">
       <a
         href="/"
         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
       >
         <LogoIcon />
         <span className="font-semibold">ttrplobby</span>
+      </a>
+
+      <a
+        href="/notifications"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+      >
+        <BellIcon />
+        <span className="font-semibold">Notifications</span>
+        <span className="ml-1 inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-brand/30 text-brand text-xs font-semibold">
+          {noteCount}
+        </span>
       </a>
     </div>
   )
@@ -521,6 +546,10 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
-
+function BellIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M15 17h5l-1.5-2V11a6.5 6.5 0 1 0-13 0v4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
