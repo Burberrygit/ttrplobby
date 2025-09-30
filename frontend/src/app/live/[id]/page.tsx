@@ -178,6 +178,14 @@ export default function LiveRoomPage() {
         setChat(prev => [...prev, msg].slice(-200))
       })
 
+      // 🔔 NEW: if this client gets kicked, redirect them to Search with filters + exclude
+      ch.on('broadcast', { event: 'kicked' }, ({ payload }) => {
+        const { userId, gameId } = (payload || {}) as { userId?: string; gameId?: string }
+        if (userId && userId === self.userId) {
+          handleKicked(gameId || roomId)
+        }
+      })
+
       ch.subscribe(async (status) => {
         if (unmountedRef.current) return
         if (status === 'SUBSCRIBED') {
@@ -315,6 +323,22 @@ export default function LiveRoomPage() {
     router.push('/profile')
   }
 
+  // ➕ NEW: handle being kicked — redirect to Search with saved filters and exclude this lobby
+  function handleKicked(gameId: string) {
+    try {
+      const filters = JSON.parse(localStorage.getItem('live:lastFilters') || 'null') || {}
+      const q = new URLSearchParams()
+      if (filters.system || room?.system) q.set('system', (filters.system || room?.system))
+      if (filters.npf != null || room?.welcomes_new != null) q.set('npf', String(filters.npf ?? !!room?.welcomes_new))
+      if (filters.adult != null || room?.is_mature != null) q.set('adult', String(filters.adult ?? !!room?.is_mature))
+      if (filters.length || room?.length_min) q.set('length', String(filters.length ?? Number(room?.length_min || 0)))
+      q.set('exclude', gameId)
+      router.replace(`/live/search?${q.toString()}`)
+    } catch {
+      router.replace('/live/search')
+    }
+  }
+
   // 🔨 Kick a player (host-only): calls RPC `kick_live_player(p_game_id uuid, p_user_id uuid)`
   async function kickPlayer(playerId: string, playerName: string) {
     if (!room?.host_id || !isHost || playerId === room.host_id) return
@@ -331,7 +355,7 @@ export default function LiveRoomPage() {
       }
       // Optimistic: remove from local presence list
       setPeers(prev => prev.filter(p => p.id !== playerId))
-      // Broadcast system message
+      // Broadcast: system message + kicked signal so the target tab redirects
       const ch = channelRef.current
       if (ch) {
         const msg: ChatMsg = {
@@ -343,6 +367,7 @@ export default function LiveRoomPage() {
           ts: Date.now()
         }
         ch.send({ type: 'broadcast', event: 'chat', payload: msg })
+        ch.send({ type: 'broadcast', event: 'kicked', payload: { userId: playerId, gameId: room.id } })
       }
     } catch (e: any) {
       setErrorMsg(e?.message || 'Failed to kick player')
@@ -659,7 +684,7 @@ function PlayerMenu({ onKick }: { onKick: () => void }) {
         <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-zinc-900/95 backdrop-blur shadow-xl p-1 text-white z-10">
           <button
             onClick={() => { setOpen(false); onKick() }}
-            className="block w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-red-300"
+            className="block w-full text-left px-3 py-2 rounded-lg text-sm hover:bg:white/10 text-red-300"
           >
             Kick
           </button>
