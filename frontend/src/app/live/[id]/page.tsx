@@ -350,6 +350,15 @@ export default function LiveRoomPage() {
               {rtStatus === 'connected' ? 'Connected' : rtStatus === 'connecting' ? 'Connecting…' : 'Connection issue'}
             </span>
             {rtInfo && <span className="text-xs text-white/40">{rtInfo}</span>}
+
+            {/* NEW: Profile button */}
+            <a
+              href="/profile"
+              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm"
+            >
+              Profile
+            </a>
+
             {isHost && (
               <Menu>
                 <button onClick={copyLobbyLink} className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10">Copy lobby link</button>
@@ -365,23 +374,14 @@ export default function LiveRoomPage() {
         {/* LEFT: Single consolidated card */}
         <aside className="w-full max-w-[380px] p-4">
           <div className="rounded-2xl border border-white/10 bg-zinc-900/70 backdrop-blur p-4 space-y-4">
-            {/* Links */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {discordHref ? (
-                <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
-                  Discord
-                </a>
-              ) : (
-                <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
-              )}
-              {gameHref ? (
-                <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
-                  Game link
-                </a>
-              ) : (
-                <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Game link: not set</span>
-              )}
-            </div>
+            {/* NEW: Poster image above title */}
+            {room?.poster_url && (
+              <img
+                src={room.poster_url}
+                alt="Game image"
+                className="w-full aspect-video object-cover rounded-xl border border-white/10"
+              />
+            )}
 
             {/* Title + meta */}
             <div>
@@ -395,6 +395,25 @@ export default function LiveRoomPage() {
               <div className="text-white/60 text-sm mt-2">
                 Seats: {seatCap ?? '—'} • In lobby: {peers.length} • Open seats: {openSeats ?? '—'}
               </div>
+
+              {/* MOVED: Link buttons under seats line */}
+              <div className="flex items-center gap-2 flex-wrap mt-3">
+                {discordHref ? (
+                  <a href={discordHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                    Discord
+                  </a>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Discord: not set</span>
+                )}
+                {gameHref ? (
+                  <a href={gameHref} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40 text-sm">
+                    Game link
+                  </a>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-lg border border-white/10 text-white/40 text-sm">Game link: not set</span>
+                )}
+              </div>
+
               {errorMsg && <div className="mt-2 text-sm text-red-400">{errorMsg}</div>}
             </div>
 
@@ -432,13 +451,13 @@ export default function LiveRoomPage() {
           </div>
         </aside>
 
-        {/* CENTER: Rotating logo */}
-        <main className="relative flex-1 grid place-items-center">
+        {/* CENTER: Rotating logo (bigger & perfectly centered) */}
+        <main className="relative flex-1 flex items-center justify-center">
           <div className="pointer-events-none text-center">
             <img
               src="/logo.png"
               alt="TTRPLobby"
-              className="w-28 h-28 opacity-80 animate-spin-slow mx-auto"
+              className="w-56 h-56 opacity-90 animate-spin-slow mx-auto"
             />
           </div>
         </main>
@@ -561,3 +580,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
