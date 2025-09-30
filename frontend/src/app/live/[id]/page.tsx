@@ -88,19 +88,37 @@ export default function LiveRoomPage() {
       const myName = prof?.display_name || prof?.username || 'Player'
       setMe({ id: user.id, name: myName, avatar: prof?.avatar_url ?? null })
 
-      // Load the room fresh
-      const { data: roomRow, error } = await supabase
-        .from('live_rooms')
-        .select('*')
-        .eq('id', roomId)
-        .maybeSingle()
+      // Load both live_rooms (UI/meta) and live_games (capacity, length, etc) and merge
+      const [
+        { data: roomRow, error: roomErr },
+        { data: gameRow, error: gameErr }
+      ] = await Promise.all([
+        supabase.from('live_rooms').select('*').eq('id', roomId).maybeSingle(),
+        supabase.from('live_games')
+          .select('system,length_minutes,max_players,new_player_friendly,is_18_plus,status')
+          .eq('id', roomId)
+          .maybeSingle()
+      ])
 
       if (unmountedRef.current) return
 
-      if (error) {
-        setErrorMsg(error.message)
-      } else if (roomRow) {
-        setRoom(roomRow as RoomDetails)
+      if (roomErr && !roomRow) {
+        setErrorMsg(roomErr.message)
+      } else if (gameErr && !gameRow) {
+        setErrorMsg(gameErr.message)
+      }
+
+      if (roomRow || gameRow) {
+        const merged: RoomDetails = {
+          ...(roomRow as any),
+          system: gameRow?.system ?? (roomRow as any)?.system ?? null,
+          length_min: gameRow?.length_minutes ?? (roomRow as any)?.length_min ?? null,
+          seats: gameRow?.max_players ?? (roomRow as any)?.seats ?? null,
+          welcomes_new: (gameRow as any)?.new_player_friendly ?? (roomRow as any)?.welcomes_new ?? null,
+          is_mature: gameRow?.is_18_plus ?? (roomRow as any)?.is_mature ?? null,
+          status: gameRow?.status ?? (roomRow as any)?.status ?? null,
+        }
+        setRoom(merged)
       }
 
       // Connect to realtime
@@ -305,10 +323,10 @@ export default function LiveRoomPage() {
     } catch { /* ignore */ }
   }
 
-  // 🧮 Seats display: prefer room.seats; fallback to room.max_players if present; otherwise "—"
+  // 🧮 Seats display: prefer merged.seats (live_games.max_players) else "—"
   const seatCap = useMemo<number | null>(() => {
     const anyRoom = room as any
-    if (room?.seats != null) return room.seats
+    if (room?.seats != null) return Number(room.seats)
     if (anyRoom?.max_players != null) return Number(anyRoom.max_players)
     return null
   }, [room])
