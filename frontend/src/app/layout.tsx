@@ -1,3 +1,4 @@
+// File: frontend/src/app/layout.tsx
 import './globals.css'
 import type { Metadata } from 'next'
 import Script from 'next/script'
@@ -26,6 +27,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="bg-zinc-950">
       <body className="min-h-screen">
+        {/* Google tag (GA4) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-C32E0WWFGN"
+          strategy="afterInteractive"
+        />
+        <Script id="ga4" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-C32E0WWFGN');
+          `}
+        </Script>
+
         {/* Structured data to help Google display your brand logo */}
         <Script
           id="ld-org"
@@ -57,3 +72,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 }
+
