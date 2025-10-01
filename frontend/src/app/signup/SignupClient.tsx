@@ -8,7 +8,6 @@ const CANON = 'www.ttrplobby.com'
 const BASE = `https://${CANON}`
 
 export default function SignupClient() {
-  const [email, setEmail] = useState('')
   const [status, setStatus] = useState('')
   const [user, setUser] = useState<any>(null)
   const searchParams = useSearchParams()
@@ -42,25 +41,6 @@ export default function SignupClient() {
     })
     return () => { sub.subscription.unsubscribe() }
   }, [searchParams, router])
-
-  async function handleEmailSignup(e: React.FormEvent) {
-    e.preventDefault()
-    if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
-      sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
-    }
-    const next =
-      searchParams?.get('next') ||
-      (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
-    const redirect = next
-      ? `${BASE}/auth/callback?next=${encodeURIComponent(next)}`
-      : `${BASE}/auth/callback`
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirect }
-    })
-    setStatus(error ? error.message : 'Check your inbox to finish creating your account.')
-  }
 
   async function handleOAuth(provider: 'google' | 'discord') {
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
@@ -99,25 +79,7 @@ export default function SignupClient() {
             <p>Signed in as {user.email}</p>
           ) : (
             <>
-              <form onSubmit={handleEmailSignup} className="space-y-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e)=>setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700"
-                  required
-                  autoComplete="email"
-                />
-                <button
-                  type="submit"
-                  className="w-full px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 font-medium"
-                >
-                  Send magic link
-                </button>
-              </form>
-
-              <div className="mt-4 space-y-2">
+              <div className="mt-2 space-y-2">
                 <button
                   onClick={()=>handleOAuth('google')}
                   className="w-full px-3 py-2 rounded-md bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-200"
