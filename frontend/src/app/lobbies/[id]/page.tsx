@@ -99,6 +99,7 @@ export default function LobbyDetailPage() {
     ? (game.length_min >= 60 ? `${(game.length_min / 60).toFixed(game.length_min % 60 ? 1 : 0)} h` : `${game.length_min} min`)
     : '—'
   const description: string = ((game as any)?.description ?? (game as any)?.desc ?? '') as string
+  const timeZoneText: string = ((game as any)?.time_zone ? String((game as any).time_zone) : '—')
 
   return (
     <Shell>
@@ -155,6 +156,7 @@ export default function LobbyDetailPage() {
             <Info label="Length" value={lengthText} />
             <Info label="New players" value={game.welcomes_new ? 'Yes' : 'No'} />
             <Info label="18+" value={game.is_mature ? 'Yes' : 'No'} />
+            <Info label="Time zone" value={timeZoneText} />
           </div>
 
           {/* Description */}
@@ -269,3 +271,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
