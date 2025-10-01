@@ -13,7 +13,7 @@ type Game = {
   seats: number | null
   welcomes_new: boolean | null
   is_mature: boolean | null
-  time_zone?: string | null
+  time_zone?: string | null   // may be IANA or an abbr in some older rows
 }
 
 export default function ApplyPage() {
@@ -25,17 +25,15 @@ export default function ApplyPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
 
-  // Quick-apply form state (core pack)
-  const [timezone, setTimezone] = useState<string>('')              // selected TZ
-  const [tzOptions, setTzOptions] = useState<string[]>([])          // all TZ options
-  const [autoTz, setAutoTz] = useState<string>('')                  // auto-detected TZ
+  // Form state
+  const [timezone, setTimezone] = useState<string>('__auto__') // selected TZ (abbr/UTC), default auto
+  const [autoAbbr, setAutoAbbr] = useState<string>('')         // auto-detected abbr like "EDT" or "GMT+1"
   const [experience, setExperience] = useState<string>('New to system')
   const [notes, setNotes] = useState<string>('')
 
   useEffect(() => {
     (async () => {
       try {
-        // pull a couple extra fields to help scoring
         const { data, error } = await supabase
           .from('games')
           .select('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone')
@@ -51,37 +49,217 @@ export default function ApplyPage() {
     })()
   }, [id])
 
-  // Populate timezone dropdown + auto-detect
+  // Auto-detect the user's timezone abbreviation (e.g., EDT, GMT+1)
   useEffect(() => {
-    const detected = (() => {
-      try {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
-      } catch {
-        return ''
-      }
-    })()
-    setAutoTz(detected)
-
-    // Use full IANA list if supported, otherwise a sensible fallback set
-    const allZones =
-      (Intl as any).supportedValuesOf?.('timeZone') ??
-      [
-        'UTC','Etc/UTC','Etc/GMT',
-        'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Phoenix','America/Toronto',
-        'America/Sao_Paulo','Europe/London','Europe/Berlin','Europe/Paris','Europe/Madrid','Europe/Rome',
-        'Europe/Athens','Africa/Johannesburg','Asia/Jerusalem','Asia/Dubai','Asia/Kolkata','Asia/Bangkok',
-        'Asia/Singapore','Asia/Taipei','Asia/Tokyo','Australia/Sydney','Pacific/Auckland'
-      ]
-    setTzOptions([...allZones].sort((a, b) => a.localeCompare(b)))
-
-    // If no selection yet, default to auto-detected (or UTC)
-    setTimezone((tz) => tz || detected || 'UTC')
+    try {
+      const ab = getAbbrForIana(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC') || 'UTC'
+      setAutoAbbr(ab)
+    } catch {
+      setAutoAbbr('UTC')
+    }
   }, [])
 
-  function computeFit(g: Game, opts: { timezone: string; experience: string }): number {
+  // ---- Timezone helpers (abbr-centric) ----
+
+  // Map of common timezone abbreviations to current UTC offset (in minutes).
+  // For DST-sensitive regions, we include both standard and daylight variants.
+  const ABBR_TO_OFFSET: Record<string, number> = {
+    // UTC/GMT
+    UTC: 0, GMT: 0,
+
+    // North America
+    NST: -210, NDT: -150, // Newfoundland
+    AST: -240, ADT: -180,
+    EST: -300, EDT: -240,
+    CST: -360, CDT: -300,
+    MST: -420, MDT: -360,
+    PST: -480, PDT: -420,
+    AKST: -540, AKDT: -480,
+    HST: -600,
+
+    // Europe
+    WET: 0, WEST: 60,
+    CET: 60, CEST: 120,
+    EET: 120, EEST: 180,
+    MSK: 180,
+
+    // Africa / Middle East (select)
+    SAST: 120, EAT: 180, IRST: 210, IRDT: 270, GST: 240,
+
+    // Asia
+    IST: 330, // India
+    PKT: 300, BST: 360, // Bangladesh
+    ICT: 420, WIB: 420, // Western Indonesia
+    ICT2: 420, // alias
+    MYT: 480, SGT: 480, HKT: 480, CSTCN: 480, // China ("CST" is ambiguous)
+    JST: 540, KST: 540,
+
+    // Australia / NZ
+    AWST: 480, ACST: 570, ACDT: 630, AEST: 600, AEDT: 660,
+    NZST: 720, NZDT: 780,
+  }
+
+  // Options grouped for the dropdown (abbr-first)
+  const TZ_GROUPS: { label: string; options: { value: string; label: string }[] }[] = [
+    {
+      label: 'Auto',
+      options: [{ value: '__auto__', label: `Auto-detect${autoAbbr ? ` (${autoAbbr})` : ''}` }],
+    },
+    {
+      label: 'UTC / GMT',
+      options: [
+        { value: 'UTC', label: 'UTC (±0)' },
+        { value: 'GMT', label: 'GMT (±0)' },
+        // Handy UTC offsets
+        { value: 'UTC-12:00', label: 'UTC-12:00' },
+        { value: 'UTC-11:00', label: 'UTC-11:00' },
+        { value: 'UTC-10:00', label: 'UTC-10:00 (HST)' },
+        { value: 'UTC-09:00', label: 'UTC-09:00 (AKST)' },
+        { value: 'UTC-08:00', label: 'UTC-08:00 (PST)' },
+        { value: 'UTC-07:00', label: 'UTC-07:00 (MST/PDT)' },
+        { value: 'UTC-06:00', label: 'UTC-06:00 (CST/MDT)' },
+        { value: 'UTC-05:00', label: 'UTC-05:00 (EST/CDT)' },
+        { value: 'UTC-04:00', label: 'UTC-04:00 (AST/EDT)' },
+        { value: 'UTC-03:00', label: 'UTC-03:00' },
+        { value: 'UTC-02:00', label: 'UTC-02:00' },
+        { value: 'UTC-01:00', label: 'UTC-01:00' },
+        { value: 'UTC+00:00', label: 'UTC+00:00 (WET)' },
+        { value: 'UTC+01:00', label: 'UTC+01:00 (CET/WEST)' },
+        { value: 'UTC+02:00', label: 'UTC+02:00 (EET/CEST)' },
+        { value: 'UTC+03:00', label: 'UTC+03:00 (MSK/EEST)' },
+        { value: 'UTC+03:30', label: 'UTC+03:30 (IRST)' },
+        { value: 'UTC+04:00', label: 'UTC+04:00 (GST)' },
+        { value: 'UTC+05:00', label: 'UTC+05:00 (PKT)' },
+        { value: 'UTC+05:30', label: 'UTC+05:30 (IST India)' },
+        { value: 'UTC+06:00', label: 'UTC+06:00 (BST Bangladesh)' },
+        { value: 'UTC+07:00', label: 'UTC+07:00 (ICT)' },
+        { value: 'UTC+08:00', label: 'UTC+08:00 (SGT/HKT/China)' },
+        { value: 'UTC+09:00', label: 'UTC+09:00 (JST/KST)' },
+        { value: 'UTC+09:30', label: 'UTC+09:30 (ACST)' },
+        { value: 'UTC+10:00', label: 'UTC+10:00 (AEST)' },
+        { value: 'UTC+11:00', label: 'UTC+11:00 (AEDT)' },
+        { value: 'UTC+12:00', label: 'UTC+12:00 (NZST)' },
+        { value: 'UTC+13:00', label: 'UTC+13:00 (NZDT)' },
+      ],
+    },
+    {
+      label: 'North America (abbr)',
+      options: [
+        { value: 'EST', label: 'EST (UTC-5)' },
+        { value: 'EDT', label: 'EDT (UTC-4)' },
+        { value: 'CST', label: 'CST (UTC-6)' },
+        { value: 'CDT', label: 'CDT (UTC-5)' },
+        { value: 'MST', label: 'MST (UTC-7)' },
+        { value: 'MDT', label: 'MDT (UTC-6)' },
+        { value: 'PST', label: 'PST (UTC-8)' },
+        { value: 'PDT', label: 'PDT (UTC-7)' },
+        { value: 'AKST', label: 'AKST (UTC-9)' },
+        { value: 'AKDT', label: 'AKDT (UTC-8)' },
+        { value: 'HST', label: 'HST (UTC-10)' },
+        { value: 'AST', label: 'AST (UTC-4)' },
+        { value: 'ADT', label: 'ADT (UTC-3)' },
+        { value: 'NST', label: 'NST (UTC-3:30)' },
+        { value: 'NDT', label: 'NDT (UTC-2:30)' },
+      ],
+    },
+    {
+      label: 'Europe (abbr)',
+      options: [
+        { value: 'WET', label: 'WET (UTC+0)' },
+        { value: 'WEST', label: 'WEST (UTC+1)' },
+        { value: 'CET', label: 'CET (UTC+1)' },
+        { value: 'CEST', label: 'CEST (UTC+2)' },
+        { value: 'EET', label: 'EET (UTC+2)' },
+        { value: 'EEST', label: 'EEST (UTC+3)' },
+        { value: 'MSK', label: 'MSK (UTC+3)' },
+      ],
+    },
+    {
+      label: 'Asia / Pacific (abbr)',
+      options: [
+        { value: 'PKT', label: 'PKT (UTC+5)' },
+        { value: 'IST', label: 'IST — India (UTC+5:30)' },
+        { value: 'BST', label: 'BST — Bangladesh (UTC+6)' },
+        { value: 'ICT', label: 'ICT (UTC+7)' },
+        { value: 'SGT', label: 'SGT — Singapore (UTC+8)' },
+        { value: 'HKT', label: 'HKT — Hong Kong (UTC+8)' },
+        { value: 'CSTCN', label: 'CST — China (UTC+8)' },
+        { value: 'JST', label: 'JST (UTC+9)' },
+        { value: 'KST', label: 'KST (UTC+9)' },
+        { value: 'AWST', label: 'AWST (UTC+8)' },
+        { value: 'ACST', label: 'ACST (UTC+9:30)' },
+        { value: 'ACDT', label: 'ACDT (UTC+10:30)' },
+        { value: 'AEST', label: 'AEST (UTC+10)' },
+        { value: 'AEDT', label: 'AEDT (UTC+11)' },
+        { value: 'NZST', label: 'NZST (UTC+12)' },
+        { value: 'NZDT', label: 'NZDT (UTC+13)' },
+      ],
+    },
+  ]
+
+  function parseUtcOffsetLabel(val: string): number | null {
+    // Accept values like "UTC-05:00" or "UTC+9:30"
+    const m = /^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(val)
+    if (!m) return null
+    const sign = m[1] === '-' ? -1 : 1
+    const hh = parseInt(m[2], 10)
+    const mm = m[3] ? parseInt(m[3], 10) : 0
+    return sign * (hh * 60 + mm)
+  }
+
+  function offsetFromSelection(sel: string): number {
+    if (sel === '__auto__') {
+      // auto -> compute from detected IANA zone
+      try {
+        const iana = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        return offsetMinutesForIana(iana)
+      } catch {
+        return 0
+      }
+    }
+    const utcParsed = parseUtcOffsetLabel(sel)
+    if (utcParsed !== null) return utcParsed
+    if (sel in ABBR_TO_OFFSET) return ABBR_TO_OFFSET[sel]
+    // Fallback: try treat selection as IANA (if ever passed through)
+    try { return offsetMinutesForIana(sel) } catch { return 0 }
+  }
+
+  function offsetMinutesForIana(iana: string): number {
+    // Compute current offset minutes for a given IANA zone using formatting
+    const now = new Date()
+    // Prefer "shortOffset" if available; fallback to "short" (e.g., "GMT-4")
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: iana, timeZoneName: 'short' })
+    const parts = fmt.formatToParts(now)
+    const tzName = parts.find(p => p.type === 'timeZoneName')?.value || 'UTC'
+    // Parse "GMT+/-H" or return 0 if non-GMT abbr (handled elsewhere)
+    const m = /^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(tzName)
+    if (m) {
+      const sign = m[1] === '-' ? -1 : 1
+      const hh = parseInt(m[2], 10)
+      const mm = m[3] ? parseInt(m[3], 10) : 0
+      return sign * (hh * 60 + mm)
+    }
+    // Non-GMT abbr (e.g., "EDT") → approximate via offset of that zone vs UTC
+    const utc = now.getTime()
+    const zoned = new Date(now.toLocaleString('en-US', { timeZone: iana }))
+    // difference between local (zoned) and UTC in minutes
+    return Math.round((zoned.getTime() - utc) / (60 * 1000))
+  }
+
+  function getAbbrForIana(iana: string): string | null {
+    try {
+      const s = new Date().toLocaleTimeString('en-US', { timeZone: iana, timeZoneName: 'short' })
+      const parts = s.split(' ')
+      return parts[parts.length - 1] || null
+    } catch {
+      return null
+    }
+  }
+
+  function computeFit(g: Game, opts: { tzSel: string; experience: string }): number {
     let score = 0
 
-    // ---- Experience (0–70)
+    // Experience (0–70)
     const exp = (opts.experience || '').toLowerCase()
     if (exp.includes('very')) score += 65
     else if (exp.includes('some')) score += 50
@@ -90,16 +268,23 @@ export default function ApplyPage() {
       if (g.welcomes_new) score += 5
     }
 
-    // ---- Time zone (0–30)
-    const gtz = (g.time_zone || '').trim().toLowerCase()
-    const ptz = (opts.timezone || '').trim().toLowerCase()
-    if (gtz && ptz) {
-      score += gtz === ptz ? 30 : 15
-    } else if (ptz) {
-      score += 12
-    } else {
-      score += 8
+    // Time zone (0–30) — compare current UTC offsets
+    const playerOffset = offsetFromSelection(opts.tzSel)
+    let gameOffset = 0
+    if (g.time_zone) {
+      const maybeUtc = parseUtcOffsetLabel(g.time_zone.toUpperCase())
+      if (maybeUtc !== null) gameOffset = maybeUtc
+      else if (g.time_zone.toUpperCase() in ABBR_TO_OFFSET) gameOffset = ABBR_TO_OFFSET[g.time_zone.toUpperCase()]
+      else {
+        // Treat as IANA
+        try { gameOffset = offsetMinutesForIana(g.time_zone) } catch { gameOffset = 0 }
+      }
     }
+    const diff = Math.abs(playerOffset - gameOffset)
+    if (diff <= 0) score += 30
+    else if (diff <= 60) score += 22
+    else if (diff <= 120) score += 15
+    else score += 10
 
     return Math.max(0, Math.min(100, Math.round(score)))
   }
@@ -107,16 +292,15 @@ export default function ApplyPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true); setErrorMsg(null); setOkMsg(null)
-
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user) } } = await supabase.auth.getUser()
       if (!user) {
         router.push(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
         return
       }
       if (!game) throw new Error('Game not loaded')
 
-      const fit_score = computeFit(game, { timezone, experience })
+      const fit_score = computeFit(game, { tzSel: timezone, experience })
 
       const payload = {
         listing_id: id,
@@ -124,7 +308,8 @@ export default function ApplyPage() {
         status: 'under_review',
         fit_score,
         answers: {
-          timezone,
+          timezone,          // store selected abbr/UTC string or "__auto__"
+          autoAbbr,          // also store what we detected on the client
           experience,
           notes,
         },
@@ -136,30 +321,17 @@ export default function ApplyPage() {
       setOkMsg('Application submitted! The GM will review it soon.')
       setTimeout(() => router.push('/schedule'), 1200)
     } catch (e: any) {
-      setErrorMsg(
-        e?.message?.includes('relation "applications" does not exist')
-          ? 'Applications table not found. Create it in Supabase and try again.'
-          : (e?.message || 'Failed to submit application')
-      )
+      setErrorMsg(e?.message || 'Failed to submit application')
     } finally {
       setSubmitting(false)
     }
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen grid place-items-center text-white/70">
-        Loading…
-      </div>
-    )
+    return <div className="min-h-screen grid place-items-center text-white/70">Loading…</div>
   }
-
   if (!game) {
-    return (
-      <div className="min-h-screen grid place-items-center text-red-300">
-        {errorMsg || 'Game not found'}
-      </div>
-    )
+    return <div className="min-h-screen grid place-items-center text-red-300">{errorMsg || 'Game not found'}</div>
   }
 
   return (
@@ -188,31 +360,29 @@ export default function ApplyPage() {
               <div className="text-white/60">{game.system || 'TTRPG'}</div>
 
               <form onSubmit={onSubmit} className="mt-5 grid gap-4">
+                {/* Time zone (abbr/UTC) */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Your time zone</span>
                   <select
                     value={timezone}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (val === '__auto__') {
-                        const z = autoTz || 'UTC'
-                        setTimezone(z)
-                      } else {
-                        setTimezone(val)
-                      }
-                    }}
+                    onChange={(e) => setTimezone(e.target.value)}
                     className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
                     required
                   >
-                    <option value="__auto__">Auto-detect {autoTz ? `(${autoTz})` : ''}</option>
-                    <optgroup label="IANA time zones">
-                      {tzOptions.map((tz) => (
-                        <option key={tz} value={tz}>{tz}</option>
-                      ))}
-                    </optgroup>
+                    {TZ_GROUPS.map(group => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
+                  <div className="text-xs text-white/50 mt-1">
+                    Pick an abbreviation (EST, GMT, CET, JST, etc), or use Auto.
+                  </div>
                 </label>
 
+                {/* Experience */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Experience with this system</span>
                   <select
@@ -226,6 +396,7 @@ export default function ApplyPage() {
                   </select>
                 </label>
 
+                {/* Notes */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Notes (character concept, availability, safety prefs)</span>
                   <textarea
@@ -281,4 +452,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
