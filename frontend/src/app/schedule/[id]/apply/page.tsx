@@ -347,7 +347,7 @@ export default function ApplyPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
-      {/* Top bar: ttrplobby button (left) and Back to search (right) */}
+      {/* Top bar: ttrplobby button (left) and Profile (right) */}
       <div className="px-4 pt-6">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <a
@@ -357,7 +357,7 @@ export default function ApplyPage() {
             <LogoIcon />
             <span className="font-semibold">ttrplobby</span>
           </a>
-          <a href="/schedule" className="text-white/70 hover:text-white">&larr; Back to search</a>
+          <a href="/profile" className="text-white/70 hover:text-white">Profile</a>
         </div>
       </div>
 
@@ -441,14 +441,25 @@ export default function ApplyPage() {
                 {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
                 {okMsg && <div className="text-sm text-emerald-400">{okMsg}</div>}
 
-                <div className="flex items-center gap-3">
+                {/* Buttons row with Back on the left, Submit/Cancel on the right */}
+                <div className="flex items-center justify-between gap-3">
                   <button
-                    disabled={submitting}
-                    className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
+                    type="button"
+                    onClick={() => router.back()}
+                    className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40"
                   >
-                    {submitting ? 'Submitting…' : 'Submit application'}
+                    Back
                   </button>
-                  <a href="/schedule" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
+                    >
+                      {submitting ? 'Submitting…' : 'Submit application'}
+                    </button>
+                    <a href="/schedule" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
+                  </div>
                 </div>
               </form>
             </div>
@@ -496,3 +507,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
