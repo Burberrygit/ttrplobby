@@ -1,4 +1,3 @@
-// File: frontend/src/app/profile/edit/page.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -341,29 +340,32 @@ export default function EditProfilePage() {
 
         {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
 
-        <div className="flex items-center gap-2">
-          <button
-            disabled={saving || usernameChecking || displayChecking || !!usernameError || !!displayError}
-            className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium text-black disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : 'Save & Continue'}
-          </button>
-          <button
-            type="button"
-            className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium"
-            onClick={()=>router.push('/profile')}
-          >
-            Cancel
-          </button>
-
-          {/* Danger zone: Hard delete */}
-          <div className="ml-auto">
+        <div className="flex items-center justify-between">
+          {/* Left: Danger zone - Delete */}
+          <div>
             <button
               type="button"
               onClick={() => { setShowDelete(true); setDeleteError(null) }}
               className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 font-semibold"
             >
               Delete profile
+            </button>
+          </div>
+
+          {/* Right: Cancel then Save */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium"
+              onClick={()=>router.push('/profile')}
+            >
+              Cancel
+            </button>
+            <button
+              disabled={saving || usernameChecking || displayChecking || !!usernameError || !!displayError}
+              className="px-4 py-2 rounded-lg bg-[#29e0e3] hover:bg-[#22c8cb] font-medium text-black disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Save & Continue'}
             </button>
           </div>
         </div>
@@ -406,4 +408,5 @@ export default function EditProfilePage() {
     </div>
   )
 }
+
 
