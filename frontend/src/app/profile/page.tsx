@@ -65,8 +65,7 @@ export default function ProfileDashboard() {
       const p = await fetchMyProfile()
       if (!mounted) return
       if (p) {
-        setDisplayName(p.display_name ?? ''
-        )
+        setDisplayName(p.display_name ?? '')
         setUsername(p.username ?? '')
         setBio(p.bio ?? '')
         setAvatarUrl(p.avatar_url ?? '')
@@ -201,7 +200,7 @@ export default function ProfileDashboard() {
                 <img
                   src={imgSrc}
                   alt="Avatar"
-                  className={`${avatarSizeClass} rounded-2xl object-cover ring-2 ring-white/10`} {/* NEW: conditional size */}
+                  className={`${avatarSizeClass} rounded-2xl object-cover ring-2 ring-white/10`}
                 />
                 {/* online dot */}
                 <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 ring-2 ring-zinc-900" title="Online" />
@@ -555,3 +554,4 @@ function BellIcon() {
     </svg>
   )
 }
+
