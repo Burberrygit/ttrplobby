@@ -140,16 +140,23 @@ export default function DMAppsPage() {
   return (
     <div className="min-h-screen flex flex-col text-white">
       <div className="max-w-6xl mx-auto w-full px-4 py-8 flex-1">
-        <div className="flex items-center justify-between">
-          <div>
+        {/* Header: poster on the LEFT, title block on the RIGHT */}
+        <div className="flex items-start gap-4">
+          <div className="hidden sm:block">
+            {game?.poster_url ? (
+              <img
+                src={game.poster_url}
+                alt="Poster"
+                className="h-16 w-28 object-cover rounded-lg border border-white/10"
+              />
+            ) : null}
+          </div>
+          <div className="flex-1">
             <a href="/notifications" className="text-white/70 hover:text-white">&larr; Back to Inbox</a>
             <h1 className="text-2xl font-bold mt-2">Applications</h1>
             {game ? (
               <p className="text-white/70">{game.title || 'Untitled game'} • {game.system || 'TTRPG'}</p>
             ) : null}
-          </div>
-          <div className="hidden sm:block">
-            {game?.poster_url ? <img src={game.poster_url} alt="Poster" className="h-16 w-28 object-cover rounded-lg border border-white/10" /> : null}
           </div>
         </div>
 
