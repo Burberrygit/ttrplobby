@@ -1,3 +1,4 @@
+// File: frontend/src/app/schedule/SearchClient.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -20,7 +21,7 @@ type Game = {
   created_at: string
   updated_at: string
   players_count?: number
-  time_zone?: string | null
+  time_zone?: string | null // stored as code, e.g., EDT, PST, UTC+01:00
 }
 
 const SYSTEMS = [
@@ -32,23 +33,68 @@ const SYSTEMS = [
 
 const SORTS = ['Relevance','Soonest','Newest','Popular'] as const
 
-const COMMON_TZS = [
-  'UTC',
-  'America/Toronto','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
-  'America/Sao_Paulo','America/Mexico_City','America/Bogota',
-  'Europe/London','Europe/Dublin','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome',
-  'Africa/Johannesburg',
-  'Asia/Jerusalem','Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Bangkok',
-  'Asia/Singapore','Asia/Hong_Kong','Asia/Tokyo','Asia/Seoul','Asia/Shanghai',
-  'Australia/Sydney','Pacific/Auckland','Pacific/Honolulu',
+// === New timezone system: codes like EST/EDT/PST as well as UTC±HH:MM ===
+const TZ_CODE_OPTIONS = [
+  'Any',
+  '__auto__',       // auto-detect from browser; we’ll render a friendly label for it
+  // UTC/GMT band
+  'UTC','GMT',
+  'UTC-12:00','UTC-11:00','UTC-10:00','UTC-09:00','UTC-08:00','UTC-07:00','UTC-06:00','UTC-05:00','UTC-04:00',
+  'UTC-03:00','UTC-02:00','UTC-01:00',
+  'UTC+00:00','UTC+01:00','UTC+02:00','UTC+03:00','UTC+03:30','UTC+04:00','UTC+05:00','UTC+05:30','UTC+06:00',
+  'UTC+07:00','UTC+08:00','UTC+09:00','UTC+09:30','UTC+10:00','UTC+11:00','UTC+12:00','UTC+13:00',
+  // North America (abbr)
+  'EST','EDT','CST','CDT','MST','MDT','PST','PDT','AKST','AKDT','HST','AST','ADT','NST','NDT',
+  // Europe (abbr)
+  'WET','WEST','CET','CEST','EET','EEST','MSK',
+  // APAC (abbr)
+  'PKT','IST','BST','ICT','SGT','HKT','CSTCN','JST','KST','AWST','ACST','ACDT','AEST','AEDT','NZST','NZDT',
 ] as const
+
+// Offsets in minutes relative to UTC (+east, -west)
+const CODE_OFFSET: Record<string, number> = {
+  UTC: 0, GMT: 0,
+  'UTC-12:00': -720, 'UTC-11:00': -660, 'UTC-10:00': -600, 'UTC-09:00': -540, 'UTC-08:00': -480,
+  'UTC-07:00': -420, 'UTC-06:00': -360, 'UTC-05:00': -300, 'UTC-04:00': -240, 'UTC-03:00': -180,
+  'UTC-02:00': -120, 'UTC-01:00': -60, 'UTC+00:00': 0, 'UTC+01:00': 60, 'UTC+02:00': 120, 'UTC+03:00': 180,
+  'UTC+03:30': 210, 'UTC+04:00': 240, 'UTC+05:00': 300, 'UTC+05:30': 330, 'UTC+06:00': 360,
+  'UTC+07:00': 420, 'UTC+08:00': 480, 'UTC+09:00': 540, 'UTC+09:30': 570, 'UTC+10:00': 600,
+  'UTC+11:00': 660, 'UTC+12:00': 720, 'UTC+13:00': 780,
+  // NA
+  EST: -300, EDT: -240, CST: -360, CDT: -300, MST: -420, MDT: -360, PST: -480, PDT: -420,
+  AKST: -540, AKDT: -480, HST: -600, AST: -240, ADT: -180, NST: -210, NDT: -150,
+  // Europe
+  WET: 0, WEST: 60, CET: 60, CEST: 120, EET: 120, EEST: 180, MSK: 180,
+  // APAC
+  PKT: 300, IST: 330, BST: 360, ICT: 420, SGT: 480, HKT: 480, CSTCN: 480, JST: 540, KST: 540,
+  AWST: 480, ACST: 570, ACDT: 630, AEST: 600, AEDT: 660, NZST: 720, NZDT: 780,
+}
+
+function isIanaZone(s: string) {
+  return /[A-Za-z]+\/[A-Za-z_]+/.test(s)
+}
+function parseUtcLabelToOffset(code: string): number | null {
+  const m = /^UTC([+-])(\d{2}):(\d{2})$/.exec(code) || /^GMT([+-])(\d{2}):(\d{2})$/.exec(code)
+  if (!m) return null
+  const sign = m[1] === '+' ? 1 : -1
+  const hh = parseInt(m[2], 10)
+  const mm = parseInt(m[3], 10)
+  return sign * (hh * 60 + mm)
+}
+function codeToOffsetMinutes(code: string): number | null {
+  if (CODE_OFFSET[code] !== undefined) return CODE_OFFSET[code]
+  const p = parseUtcLabelToOffset(code)
+  return p == null ? null : p
+}
 
 export default function SearchClient() {
   const router = useRouter()
   const params = useSearchParams()
 
-  const MY_TZ = useMemo(() => getBrowserTz(), [])
-  const tzLabelLocal = `Local (auto: ${MY_TZ})`
+  // Browser local IANA + short code
+  const MY_IANA = useMemo(() => getBrowserIana(), [])
+  const AUTO_ABBR = useMemo(() => getAbbrForIana(MY_IANA) || 'UTC', [MY_IANA])
+  const tzAutoLabel = `Auto-detect (${AUTO_ABBR})`
 
   // --- filters (seed from URL) ---
   const [q, setQ] = useState(decode(params.get('q') || ''))
@@ -57,7 +103,11 @@ export default function SearchClient() {
   const [welcomesNew, setWelcomesNew] = useState(params.get('new') === '1')
   const [mature, setMature] = useState(params.get('mature') === '1')
   const [sortBy, setSortBy] = useState<string>(params.get('sort') || 'Relevance')
-  const [tz, setTz] = useState<string>(params.get('tz') || 'Any') // 'Any' | 'local' | IANA
+
+  // Use new tz code param; fall back to old ?tz if present; default to Auto
+  const initialTzFromParams =
+    params.get('tz_code') || params.get('tz') || (typeof window !== 'undefined' ? localStorage.getItem('ttrplobby:tz_code') || '' : '')
+  const [tzCode, setTzCode] = useState<string>(initialTzFromParams || '__auto__') // '__auto__' | 'Any' | code
 
   // --- data ---
   const [loading, setLoading] = useState(true)
@@ -88,8 +138,9 @@ export default function SearchClient() {
     set('new', welcomesNew ? '1' : undefined)
     set('mature', mature ? '1' : undefined)
     set('sort', sortBy !== 'Relevance' ? sortBy : undefined)
-    set('tz', tz !== 'Any' ? tz : undefined)
+    set('tz_code', tzCode !== 'Any' ? tzCode : undefined)
     router.replace(u.pathname + (u.search ? `?${u.searchParams.toString()}` : ''), { scroll: false })
+    try { localStorage.setItem('ttrplobby:tz_code', tzCode) } catch {}
   }
 
   useEffect(() => {
@@ -110,7 +161,7 @@ export default function SearchClient() {
     setLoading(true)
     void load().finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [system, onlySeats, welcomesNew, mature, sortBy, tz])
+  }, [system, onlySeats, welcomesNew, mature, sortBy, tzCode])
 
   async function load() {
     try {
@@ -161,9 +212,10 @@ export default function SearchClient() {
       if (welcomesNew) filtered = filtered.filter((g) => !!g.welcomes_new)
       if (mature) filtered = filtered.filter((g) => !!g.is_mature)
 
-      // Time zone filter (if a game declares its time_zone)
-      if (tz !== 'Any' && tz !== 'local') {
-        filtered = filtered.filter((g) => (g.time_zone || '').toLowerCase() === tz.toLowerCase())
+      // Time zone filter against code stored on the game
+      if (tzCode !== 'Any') {
+        const code = tzCode === '__auto__' ? (AUTO_ABBR || 'UTC') : tzCode
+        filtered = filtered.filter((g) => (g.time_zone || '').toUpperCase() === code.toUpperCase())
       }
 
       // client-side sorts
@@ -195,10 +247,11 @@ export default function SearchClient() {
     setWelcomesNew(false)
     setMature(false)
     setSortBy('Relevance')
-    setTz('Any')
+    setTzCode('__auto__')
   }
 
-  const effectiveTz = tz === 'Any' || tz === 'local' ? MY_TZ : tz
+  // For display: if user picked a code, we’ll render times using that offset; otherwise use local IANA
+  const displayZone = tzCode === 'Any' || tzCode === '__auto__' ? MY_IANA : tzCode
 
   return (
     <div className="min-h-screen flex flex-col text-white">
@@ -232,11 +285,11 @@ export default function SearchClient() {
                 <Select value={system} onChange={setSystem} label="System" options={SYSTEMS as unknown as string[]} />
                 <Select value={sortBy} onChange={setSortBy} label="Sort" options={SORTS as unknown as string[]} />
                 <Select
-                  value={tz}
-                  onChange={setTz}
+                  value={tzCode}
+                  onChange={setTzCode}
                   label="Time zone"
-                  options={['Any', 'local', ...COMMON_TZS] as unknown as string[]}
-                  labels={{ local: tzLabelLocal }}
+                  options={TZ_CODE_OPTIONS as unknown as string[]}
+                  labels={{ '__auto__': tzAutoLabel }}
                 />
               </div>
 
@@ -277,7 +330,7 @@ export default function SearchClient() {
               <div className="text-white/70 text-sm mt-3">No games match your filters.</div>
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                {games.map((g) => <GameCard key={g.id} g={g} tz={effectiveTz} />)}
+                {games.map((g) => <GameCard key={g.id} g={g} tz={displayZone} />)}
               </div>
             )}
           </div>
@@ -384,7 +437,7 @@ function decode(s: string) {
 function escapeLike(s: string) {
   return s.replace(/[%_]/g, (m) => '\\' + m)
 }
-function getBrowserTz(): string {
+function getBrowserIana(): string {
   try {
     const z = Intl.DateTimeFormat().resolvedOptions().timeZone
     return z || 'UTC'
@@ -392,16 +445,49 @@ function getBrowserTz(): string {
     return 'UTC'
   }
 }
+function getAbbrForIana(iana: string): string | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: iana, timeZoneName: 'short', hour: '2-digit' }).formatToParts(new Date())
+    const tzPart = parts.find(p => p.type === 'timeZoneName')
+    const val = tzPart?.value?.trim() || ''
+    if (/^[A-Za-z]{2,5}$/.test(val)) return val.toUpperCase()
+    // Some browsers return "GMT+2"
+    const m = /^GMT([+-]\d{1,2})/.exec(val)
+    if (m) return `UTC${m[1].length === 2 ? m[1] + ':00' : m[1]}`
+    return null
+  } catch { return null }
+}
+
 function fmtDateInTz(iso: string, tz: string): string {
   try {
     const d = new Date(iso)
+    if (isIanaZone(tz)) {
+      return new Intl.DateTimeFormat(undefined, {
+        timeZone: tz,
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(d)
+    }
+    // tz is a code like EDT / UTC+01:00
+    const offset = codeToOffsetMinutes(tz)
+    if (offset == null) {
+      // Fallback: local
+      return new Intl.DateTimeFormat(undefined, {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(d)
+    }
+    // Convert to "clock time" in the target fixed offset: take UTC ms and add offset
+    const utcMs = d.getTime() + d.getTimezoneOffset() * 60000
+    const shifted = new Date(utcMs + offset * 60000)
     return new Intl.DateTimeFormat(undefined, {
-      timeZone: tz,
+      timeZone: 'UTC',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(d)
+    }).format(shifted)
   } catch {
     const d = new Date(iso)
     return d.toLocaleString()
