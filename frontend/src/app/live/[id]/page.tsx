@@ -1,3 +1,4 @@
+// File: frontend/src/app/live/[id]/page.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -50,6 +51,64 @@ const TIPS = [
   'Hosts can end the lobby from the Menu.',
 ]
 
+/* -------------------------------- Geo presence (writes lat/lon to live_presence) -------------------------------- */
+function useGeoPresence(roomId: string) {
+  useEffect(() => {
+    if (!isUuid(roomId)) return
+    let watchId: number | null = null
+    let lastSent = 0
+    let cancelled = false
+
+    async function start() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        if (!('geolocation' in navigator)) return
+
+        async function upsert(lat: number, lon: number) {
+          // Requires UNIQUE index on (user_id, room_id) for stable upserts
+          await supabase
+            .from('live_presence')
+            .upsert(
+              {
+                user_id: user.id,
+                room_id: roomId,
+                lat,
+                lon,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'user_id,room_id' }
+            )
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const now = Date.now()
+            if (now - lastSent < 15000) return // throttle to ~4/min
+            lastSent = now
+            const { latitude, longitude } = pos.coords
+            void upsert(latitude, longitude)
+          },
+          (_err) => {
+            // silent; user may deny permission
+          },
+          { enableHighAccuracy: false, maximumAge: 30000, timeout: 10000 }
+        )
+      } catch {
+        /* ignore */
+      }
+    }
+
+    void start()
+    return () => {
+      cancelled = true
+      if (watchId !== null) {
+        try { navigator.geolocation.clearWatch(watchId) } catch {}
+      }
+    }
+  }, [roomId])
+}
+
 export default function LiveRoomPage() {
   const router = useRouter()
   const params = useSearchParams()
@@ -81,6 +140,9 @@ export default function LiveRoomPage() {
     const id = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 4500)
     return () => clearInterval(id)
   }, [])
+
+  // ✅ Start geo presence writer for this room (players page reads from live_presence)
+  useGeoPresence(roomId)
 
   useEffect(() => {
     // Do nothing until we have a valid UUID route param
