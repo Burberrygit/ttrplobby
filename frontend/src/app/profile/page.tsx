@@ -25,6 +25,7 @@ export default function ProfileDashboard() {
   const [username, setUsername] = useState('')
   const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
+  const [timeZoneLabel, setTimeZoneLabel] = useState<string>('—')
 
   const [memberSince, setMemberSince] = useState<string>('—')
   const [hostedCount, setHostedCount] = useState<number>(0)
@@ -69,6 +70,7 @@ export default function ProfileDashboard() {
         setUsername(p.username ?? '')
         setBio(p.bio ?? '')
         setAvatarUrl(p.avatar_url ?? '')
+        setTimeZoneLabel(p.time_zone ?? '—')
       }
 
       // NEW: unread notifications count
@@ -257,7 +259,7 @@ export default function ProfileDashboard() {
 
             {/* Stats */}
             <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatCard label="Games played" value={joinedCount.toString()} />
+              <StatCard label="Time zone" value={timeZoneLabel} />
               <StatCard label="Games hosted" value={hostedCount.toString()} />
               <StatCard label="Reputation" value="—" />
               <StatCard label="Member since" value={memberSince} />
@@ -554,4 +556,3 @@ function BellIcon() {
     </svg>
   )
 }
-
