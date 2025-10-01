@@ -1,4 +1,3 @@
-// File: frontend/src/app/schedule/new/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -21,6 +20,10 @@ export default function NewSchedulePage() {
   const [isMature, setIsMature] = useState(false)
   const [description, setDescription] = useState('') // long description
 
+  // NEW: time zone (abbr/UTC) selection
+  const [timeZoneSel, setTimeZoneSel] = useState<string>('__auto__')
+  const [autoAbbr, setAutoAbbr] = useState<string>('')
+
   // image upload state
   const [posterFile, setPosterFile] = useState<File | null>(null)
   const [posterPreview, setPosterPreview] = useState<string>('')
@@ -41,6 +44,17 @@ export default function NewSchedulePage() {
       setAuthChecked(true)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Detect user’s current zone abbreviation for the Auto option
+  useEffect(() => {
+    try {
+      const iana = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+      const abbr = getAbbrForIana(iana) || 'UTC'
+      setAutoAbbr(abbr)
+    } catch {
+      setAutoAbbr('UTC')
+    }
   }, [])
 
   function onPickPoster(file?: File | null) {
@@ -90,6 +104,10 @@ export default function NewSchedulePage() {
     try {
       const poster_url = await uploadPosterIfNeeded()
       const minutes = Math.round((Number.isFinite(lengthHours) ? lengthHours : 2) * 60) // hours → minutes
+
+      // Normalize the zone to save (abbr or UTC±HH:MM). For Auto, store detected abbr (or UTC).
+      const time_zone = timeZoneSel === '__auto__' ? (autoAbbr || 'UTC') : timeZoneSel
+
       const id = await createGame({
         title: title || 'Untitled game',
         system,
@@ -101,6 +119,7 @@ export default function NewSchedulePage() {
         is_mature: isMature,
         description,               
         status: 'open',
+        time_zone, // NEW
       })
       router.push(`/lobbies/${id}`)
     } catch (e: any) {
@@ -232,6 +251,24 @@ export default function NewSchedulePage() {
                 />
               </Field>
 
+              {/* NEW: Time zone (abbr/UTC) — placed across from Vibe */}
+              <Field label="Time zone (abbr)">
+                <select
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
+                  value={timeZoneSel}
+                  onChange={e=>setTimeZoneSel(e.target.value)}
+                >
+                  {TZ_GROUPS(autoAbbr).map(group => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <span className="text-xs text-white/50 mt-1">Pick EST, GMT, CET, JST, etc — or use Auto.</span>
+              </Field>
+
               <Field label="New players welcome?">
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e=>setWelcomesNew(e.target.checked)} />
@@ -312,6 +349,115 @@ const SYSTEMS = [
   'Shadowrun','Dungeon World','OSR','Savage Worlds','GURPS','Cyberpunk RED','Alien RPG',
   'Delta Green','Blades in the Dark','PbtA','World of Darkness','Warhammer Fantasy','Warhammer 40K','Mörk Borg','Other'
 ]
+
+// Build the dropdown groups (Auto + common abbreviations and UTC offsets)
+function TZ_GROUPS(autoAbbr: string) {
+  return [
+    {
+      label: 'Auto',
+      options: [{ value: '__auto__', label: `Auto-detect${autoAbbr ? ` (${autoAbbr})` : ''}` }],
+    },
+    {
+      label: 'UTC / GMT',
+      options: [
+        { value: 'UTC', label: 'UTC (±0)' },
+        { value: 'GMT', label: 'GMT (±0)' },
+        { value: 'UTC-12:00', label: 'UTC-12:00' },
+        { value: 'UTC-11:00', label: 'UTC-11:00' },
+        { value: 'UTC-10:00', label: 'UTC-10:00 (HST)' },
+        { value: 'UTC-09:00', label: 'UTC-09:00 (AKST)' },
+        { value: 'UTC-08:00', label: 'UTC-08:00 (PST)' },
+        { value: 'UTC-07:00', label: 'UTC-07:00 (MST/PDT)' },
+        { value: 'UTC-06:00', label: 'UTC-06:00 (CST/MDT)' },
+        { value: 'UTC-05:00', label: 'UTC-05:00 (EST/CDT)' },
+        { value: 'UTC-04:00', label: 'UTC-04:00 (AST/EDT)' },
+        { value: 'UTC-03:00', label: 'UTC-03:00' },
+        { value: 'UTC-02:00', label: 'UTC-02:00' },
+        { value: 'UTC-01:00', label: 'UTC-01:00' },
+        { value: 'UTC+00:00', label: 'UTC+00:00 (WET)' },
+        { value: 'UTC+01:00', label: 'UTC+01:00 (CET/WEST)' },
+        { value: 'UTC+02:00', label: 'UTC+02:00 (EET/CEST)' },
+        { value: 'UTC+03:00', label: 'UTC+03:00 (MSK/EEST)' },
+        { value: 'UTC+03:30', label: 'UTC+03:30 (IRST)' },
+        { value: 'UTC+04:00', label: 'UTC+04:00 (GST)' },
+        { value: 'UTC+05:00', label: 'UTC+05:00 (PKT)' },
+        { value: 'UTC+05:30', label: 'UTC+05:30 (IST India)' },
+        { value: 'UTC+06:00', label: 'UTC+06:00 (BST Bangladesh)' },
+        { value: 'UTC+07:00', label: 'UTC+07:00 (ICT)' },
+        { value: 'UTC+08:00', label: 'UTC+08:00 (SGT/HKT/China)' },
+        { value: 'UTC+09:00', label: 'UTC+09:00 (JST/KST)' },
+        { value: 'UTC+09:30', label: 'UTC+09:30 (ACST)' },
+        { value: 'UTC+10:00', label: 'UTC+10:00 (AEST)' },
+        { value: 'UTC+11:00', label: 'UTC+11:00 (AEDT)' },
+        { value: 'UTC+12:00', label: 'UTC+12:00 (NZST)' },
+        { value: 'UTC+13:00', label: 'UTC+13:00 (NZDT)' },
+      ],
+    },
+    {
+      label: 'North America (abbr)',
+      options: [
+        { value: 'EST', label: 'EST (UTC-5)' },
+        { value: 'EDT', label: 'EDT (UTC-4)' },
+        { value: 'CST', label: 'CST (UTC-6)' },
+        { value: 'CDT', label: 'CDT (UTC-5)' },
+        { value: 'MST', label: 'MST (UTC-7)' },
+        { value: 'MDT', label: 'MDT (UTC-6)' },
+        { value: 'PST', label: 'PST (UTC-8)' },
+        { value: 'PDT', label: 'PDT (UTC-7)' },
+        { value: 'AKST', label: 'AKST (UTC-9)' },
+        { value: 'AKDT', label: 'AKDT (UTC-8)' },
+        { value: 'HST', label: 'HST (UTC-10)' },
+        { value: 'AST', label: 'AST (UTC-4)' },
+        { value: 'ADT', label: 'ADT (UTC-3)' },
+        { value: 'NST', label: 'NST (UTC-3:30)' },
+        { value: 'NDT', label: 'NDT (UTC-2:30)' },
+      ],
+    },
+    {
+      label: 'Europe (abbr)',
+      options: [
+        { value: 'WET', label: 'WET (UTC+0)' },
+        { value: 'WEST', label: 'WEST (UTC+1)' },
+        { value: 'CET', label: 'CET (UTC+1)' },
+        { value: 'CEST', label: 'CEST (UTC+2)' },
+        { value: 'EET', label: 'EET (UTC+2)' },
+        { value: 'EEST', label: 'EEST (UTC+3)' },
+        { value: 'MSK', label: 'MSK (UTC+3)' },
+      ],
+    },
+    {
+      label: 'Asia / Pacific (abbr)',
+      options: [
+        { value: 'PKT', label: 'PKT (UTC+5)' },
+        { value: 'IST', label: 'IST — India (UTC+5:30)' },
+        { value: 'BST', label: 'BST — Bangladesh (UTC+6)' },
+        { value: 'ICT', label: 'ICT (UTC+7)' },
+        { value: 'SGT', label: 'SGT — Singapore (UTC+8)' },
+        { value: 'HKT', label: 'HKT — Hong Kong (UTC+8)' },
+        { value: 'CSTCN', label: 'CST — China (UTC+8)' },
+        { value: 'JST', label: 'JST (UTC+9)' },
+        { value: 'KST', label: 'KST (UTC+9)' },
+        { value: 'AWST', label: 'AWST (UTC+8)' },
+        { value: 'ACST', label: 'ACST (UTC+9:30)' },
+        { value: 'ACDT', label: 'ACDT (UTC+10:30)' },
+        { value: 'AEST', label: 'AEST (UTC+10)' },
+        { value: 'AEDT', label: 'AEDT (UTC+11)' },
+        { value: 'NZST', label: 'NZST (UTC+12)' },
+        { value: 'NZDT', label: 'NZDT (UTC+13)' },
+      ],
+    },
+  ]
+}
+
+function getAbbrForIana(iana: string): string | null {
+  try {
+    const s = new Date().toLocaleTimeString('en-US', { timeZone: iana, timeZoneName: 'short' })
+    const parts = s.split(' ')
+    return parts[parts.length - 1] || null
+  } catch {
+    return null
+  }
+}
 
 function LogoIcon() {
   return (
