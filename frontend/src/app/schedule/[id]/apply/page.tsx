@@ -14,6 +14,10 @@ type Game = {
   welcomes_new: boolean | null
   is_mature: boolean | null
   time_zone?: string | null   // may be IANA or an abbr in some older rows
+  status?: string | null
+  length_min?: number | null
+  description?: string | null
+  vibe?: string | null
 }
 
 export default function ApplyPage() {
@@ -36,7 +40,7 @@ export default function ApplyPage() {
       try {
         const { data, error } = await supabase
           .from('games')
-          .select('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone')
+          .select('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone,status,length_min,description,vibe')
           .eq('id', id)
           .single()
         if (error) throw error
@@ -334,6 +338,13 @@ export default function ApplyPage() {
     return <div className="min-h-screen grid place-items-center text-red-300">{errorMsg || 'Game not found'}</div>
   }
 
+  // Derived display values to mirror the lobby details card
+  const lengthText = game.length_min
+    ? (game.length_min >= 60 ? `${(game.length_min / 60).toFixed(game.length_min % 60 ? 1 : 0)} h` : `${game.length_min} min`)
+    : '—'
+  const timeZoneText: string = (game.time_zone ? String(game.time_zone) : '—')
+  const description: string = ((game as any)?.description ?? (game as any)?.desc ?? '') as string
+
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
       {/* Top bar: ttrplobby button (left) and Back to search (right) */}
@@ -357,9 +368,29 @@ export default function ApplyPage() {
             <div className="h-36 bg-cover bg-center" style={{ backgroundImage: `url(${game.poster_url || '/game-poster-fallback.jpg'})` }} />
             <div className="p-5 bg-zinc-900/80">
               <h1 className="text-2xl font-bold">{game.title || 'Untitled game'}</h1>
-              <div className="text-white/60">{game.system || 'TTRPG'}</div>
+              <div className="text-white/80">
+                {(game.system || 'TTRPG')}{game.vibe ? ` • ${game.vibe}` : ''}
+              </div>
 
-              <form onSubmit={onSubmit} className="mt-5 grid gap-4">
+              {/* Details (mirror lobby page) */}
+              <div className="mt-4 grid sm:grid-cols-2 gap-4">
+                <Info label="Status" value={titleCase(game.status || 'open')} />
+                <Info label="Length" value={lengthText} />
+                <Info label="New players" value={game.welcomes_new ? 'Yes' : 'No'} />
+                <Info label="18+" value={game.is_mature ? 'Yes' : 'No'} />
+                <Info label="Time zone" value={timeZoneText} />
+              </div>
+
+              {/* Description */}
+              <div className="mt-6">
+                <h2 className="text-sm font-semibold">Description</h2>
+                <p className="mt-2 text-white/80 whitespace-pre-wrap">
+                  {description ? description : 'No description provided yet.'}
+                </p>
+              </div>
+
+              {/* Application form */}
+              <form onSubmit={onSubmit} className="mt-6 grid gap-4">
                 {/* Time zone (abbr/UTC) */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Your time zone</span>
@@ -442,6 +473,19 @@ export default function ApplyPage() {
       </footer>
     </div>
   )
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+      <div className="text-xs uppercase tracking-wider text-white/60">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  )
+}
+
+function titleCase(s: string) {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 function LogoIcon() {
