@@ -17,7 +17,7 @@ export default function EditProfilePage() {
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [bio, setBio] = useState('')
-  const [timeZone, setTimeZone] = useState<string>('auto')
+  const [timeZone, setTimeZone] = useState<string>('__auto__')
 
   // uniqueness validation state
   const [usernameChecking, setUsernameChecking] = useState(false)
@@ -44,18 +44,85 @@ export default function EditProfilePage() {
     }
   }, [])
 
-  // Curated set of IANA time zones
-  const COMMON_TZS = useMemo(
-    () => [
-      'UTC',
-      'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Toronto',
-      'America/Mexico_City','America/Sao_Paulo','Europe/London','Europe/Dublin','Europe/Paris','Europe/Berlin',
-      'Europe/Madrid','Europe/Rome','Africa/Johannesburg','Asia/Dubai','Asia/Karachi','Asia/Kolkata',
-      'Asia/Bangkok','Asia/Singapore','Asia/Hong_Kong','Asia/Shanghai','Asia/Tokyo','Asia/Seoul',
-      'Australia/Sydney','Pacific/Auckland','Pacific/Honolulu'
-    ],
-    []
-  )
+  // === New timezone system: codes like EST/EDT/PST as well as UTC±HH:MM ===
+  const TZ_CODE_OPTIONS = useMemo(() => ([
+    'Any',
+    '__auto__',       // auto-detect from browser; we’ll render a friendly label for it
+    // UTC/GMT band
+    'UTC','GMT',
+    'UTC-12:00','UTC-11:00','UTC-10:00','UTC-09:00','UTC-08:00','UTC-07:00','UTC-06:00','UTC-05:00','UTC-04:00',
+    'UTC-03:00','UTC-02:00','UTC-01:00',
+    'UTC+00:00','UTC+01:00','UTC+02:00','UTC+03:00','UTC+03:30','UTC+04:00','UTC+05:00','UTC+05:30','UTC+06:00',
+    'UTC+07:00','UTC+08:00','UTC+09:00','UTC+09:30','UTC+10:00','UTC+11:00','UTC+12:00','UTC+13:00',
+    // North America (abbr)
+    'EST','EDT','CST','CDT','MST','MDT','PST','PDT','AKST','AKDT','HST','AST','ADT','NST','NDT',
+    // Europe (abbr)
+    'WET','WEST','CET','CEST','EET','EEST','MSK',
+    // APAC (abbr)
+    'PKT','IST','BST','ICT','SGT','HKT','CSTCN','JST','KST','AWST','ACST','ACDT','AEST','AEDT','NZST','NZDT',
+  ] as const), [])
+
+  // Offsets in minutes relative to UTC (+east, -west)
+  const CODE_OFFSET: Record<string, number> = useMemo(() => ({
+    UTC: 0, GMT: 0,
+    'UTC-12:00': -720, 'UTC-11:00': -660, 'UTC-10:00': -600, 'UTC-09:00': -540, 'UTC-08:00': -480,
+    'UTC-07:00': -420, 'UTC-06:00': -360, 'UTC-05:00': -300, 'UTC-04:00': -240, 'UTC-03:00': -180,
+    'UTC-02:00': -120, 'UTC-01:00': -60, 'UTC+00:00': 0, 'UTC+01:00': 60, 'UTC+02:00': 120, 'UTC+03:00': 180,
+    'UTC+03:30': 210, 'UTC+04:00': 240, 'UTC+05:00': 300, 'UTC+05:30': 330, 'UTC+06:00': 360,
+    'UTC+07:00': 420, 'UTC+08:00': 480, 'UTC+09:00': 540, 'UTC+09:30': 570, 'UTC+10:00': 600,
+    'UTC+11:00': 660, 'UTC+12:00': 720, 'UTC+13:00': 780,
+    // NA
+    EST: -300, EDT: -240, CST: -360, CDT: -300, MST: -420, MDT: -360, PST: -480, PDT: -420,
+    AKST: -540, AKDT: -480, HST: -600, AST: -240, ADT: -180, NST: -210, NDT: -150,
+    // Europe
+    WET: 0, WEST: 60, CET: 60, CEST: 120, EET: 120, EEST: 180, MSK: 180,
+    // APAC
+    PKT: 300, IST: 330, BST: 360, ICT: 420, SGT: 480, HKT: 480, CSTCN: 480, JST: 540, KST: 540,
+    AWST: 480, ACST: 570, ACDT: 630, AEST: 600, AEDT: 660, NZST: 720, NZDT: 780,
+  }), [])
+
+  function isIanaZone(s: string) {
+    return /[A-Za-z]+\/[A-Za-z_]+/.test(s)
+  }
+  function parseUtcLabelToOffset(code: string): number | null {
+    const m = /^UTC([+-])(\d{2}):(\d{2})$/.exec(code) || /^GMT([+-])(\d{2}):(\d{2})$/.exec(code)
+    if (!m) return null
+    const sign = m[1] === '+' ? 1 : -1
+    const hh = parseInt(m[2], 10)
+    const mm = parseInt(m[3], 10)
+    return sign * (hh * 60 + mm)
+  }
+  function codeToOffsetMinutes(code: string): number | null {
+    if (CODE_OFFSET[code] !== undefined) return CODE_OFFSET[code]
+    const p = parseUtcLabelToOffset(code)
+    return p == null ? null : p
+  }
+  function offsetToUTCString(mins: number) {
+    const sign = mins >= 0 ? '+' : '-'
+    const abs = Math.abs(mins)
+    const hh = String(Math.floor(abs / 60)).padStart(2, '0')
+    const mm = String(abs % 60).padStart(2, '0')
+    return `UTC${sign}${hh}:${mm}`
+  }
+  const browserAbbr = useMemo(() => {
+    try {
+      const dtf = new Intl.DateTimeFormat([], { timeZoneName: 'short' })
+      const parts = dtf.formatToParts(new Date())
+      const abbr = parts.find(p => p.type === 'timeZoneName')?.value ?? 'UTC'
+      return abbr
+    } catch {
+      return 'UTC'
+    }
+  }, [])
+  function labelForTZ(code: string) {
+    if (code === '__auto__') return `Auto-detect (${browserAbbr})`
+    if (code === 'Any') return 'Any time zone'
+    if (code === 'UTC' || code === 'GMT') return `${code} (UTC±0)`
+    const off = codeToOffsetMinutes(code)
+    if (off != null) return `${code} (${offsetToUTCString(off)})`
+    // fallback for unknowns
+    return code
+  }
 
   useEffect(() => {
     (async () => {
@@ -73,10 +140,11 @@ export default function EditProfilePage() {
           setDisplayName(p.display_name ?? '')
           setAvatarUrl(p.avatar_url ?? '')
           setBio(p.bio ?? '')
-          setTimeZone(p.time_zone ?? 'auto')
+          // Map any previous values: if stored IANA or 'auto', prefer __auto__
+          const stored = p.time_zone
+          setTimeZone(stored && !isIanaZone(stored) ? stored : '__auto__')
         } else {
-          // sensible defaults for first-run setup
-          setTimeZone('auto')
+          setTimeZone('__auto__')
         }
       } catch (e: any) {
         setErrorMsg(e?.message || 'Failed to load profile')
@@ -195,7 +263,7 @@ export default function EditProfilePage() {
         display_name: displayName.trim(),
         avatar_url: finalAvatarUrl || undefined,
         bio,
-        time_zone: timeZone === 'auto' ? browserTz : timeZone,
+        time_zone: timeZone === '__auto__' ? browserTz : timeZone,
       })
 
       router.push('/profile')
@@ -301,7 +369,7 @@ export default function EditProfilePage() {
         <label className="grid gap-1 text-sm">
           <span className="text-white/80">Username</span>
           <input
-            className="px-3 py-2 rounded-md bg-zinc-950 border border-white/10 text-white placeholder:text-white/40"
+            className="px-3 py-2 rounded-md bg-zinc-950 border border-white/10 textwhite placeholder:text-white/40"
             value={username}
             onChange={(e)=>{ setUsername(e.target.value); setUsernameError(null) }}
             onBlur={(e)=>{ void checkUsernameUnique(e.target.value) }}
@@ -320,9 +388,8 @@ export default function EditProfilePage() {
             value={timeZone}
             onChange={e => setTimeZone(e.target.value)}
           >
-            <option value="auto">Auto (Browser: {browserTz})</option>
-            {COMMON_TZS.map(tz => (
-              <option key={tz} value={tz}>{tz}</option>
+            {TZ_CODE_OPTIONS.map(code => (
+              <option key={code} value={code}>{labelForTZ(code)}</option>
             ))}
           </select>
         </label>
