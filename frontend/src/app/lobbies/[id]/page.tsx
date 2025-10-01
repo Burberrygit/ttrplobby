@@ -250,7 +250,23 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
-function Shell({ children }: { children: React.ReactNode }) { return <div className="max-w-5xl mx-auto px-4 py-8 text-white">{children}</div> }
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen flex flex-col text-white">
+      <div className="max-w-5xl mx-auto px-4 py-8 w-full flex-1">{children}</div>
+      <footer className="border-t border-white/10 px-6">
+        <div className="max-w-5xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  )
+}
 function TopBanner() {
   return (
     <div className="mb-4 flex items-center justify-between">
@@ -271,4 +287,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
