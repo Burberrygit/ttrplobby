@@ -1,4 +1,3 @@
-// File: frontend/src/app/lobbies/[id]/page.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -99,6 +98,7 @@ export default function LobbyDetailPage() {
   const lengthText = game.length_min
     ? (game.length_min >= 60 ? `${(game.length_min / 60).toFixed(game.length_min % 60 ? 1 : 0)} h` : `${game.length_min} min`)
     : '—'
+  const description: string = ((game as any)?.description ?? (game as any)?.desc ?? '') as string
 
   return (
     <Shell>
@@ -157,6 +157,14 @@ export default function LobbyDetailPage() {
             <Info label="18+" value={game.is_mature ? 'Yes' : 'No'} />
           </div>
 
+          {/* Description */}
+          <div className="mt-6">
+            <h2 className="text-lg font-semibold">Description</h2>
+            <p className="mt-2 text-white/80 whitespace-pre-wrap">
+              {description ? description : 'No description provided yet.'}
+            </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 mt-6">
             {!isOwner && (
               <>
@@ -168,8 +176,6 @@ export default function LobbyDetailPage() {
                 </button>
               </>
             )}
-            <a href="/profile" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Back to profile</a>
-            <a href="/lobbies" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Back to lobbies</a>
           </div>
 
           {/* Players */}
@@ -245,9 +251,12 @@ function Info({ label, value }: { label: string; value: string }) {
 function Shell({ children }: { children: React.ReactNode }) { return <div className="max-w-5xl mx-auto px-4 py-8 text-white">{children}</div> }
 function TopBanner() {
   return (
-    <div className="mb-4">
+    <div className="mb-4 flex items-center justify-between">
       <a href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
         <LogoIcon /><span className="font-semibold">ttrplobby</span>
+      </a>
+      <a href="/profile" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
+        <span className="font-semibold">Profile</span>
       </a>
     </div>
   )
