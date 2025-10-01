@@ -16,6 +16,22 @@ type Game = {
   isOwner: boolean
 }
 
+function isIanaZone(s: string) {
+  return /[A-Za-z]+\/[A-Za-z_]+/.test(s)
+}
+
+function abbrFor(zone?: string | null) {
+  try {
+    if (!zone) return '—'
+    const opts: Intl.DateTimeFormatOptions = { timeZoneName: 'short', timeZone: zone }
+    const parts = new Intl.DateTimeFormat([], opts).formatToParts(new Date())
+    const abbr = parts.find(p => p.type === 'timeZoneName')?.value
+    return abbr || zone
+  } catch {
+    return zone || '—'
+  }
+}
+
 export default function ProfileDashboard() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -70,7 +86,21 @@ export default function ProfileDashboard() {
         setUsername(p.username ?? '')
         setBio(p.bio ?? '')
         setAvatarUrl(p.avatar_url ?? '')
-        setTimeZoneLabel(p.time_zone ?? '—')
+
+        // NEW: show EDT/EST/etc. when possible
+        const tz = p.time_zone ?? ''
+        if (!tz) {
+          setTimeZoneLabel('—')
+        } else if (tz === '__auto__' || tz === 'auto') {
+          // legacy value: render browser zone abbr
+          setTimeZoneLabel(abbrFor(Intl.DateTimeFormat().resolvedOptions().timeZone))
+        } else if (isIanaZone(tz)) {
+          // Auto saved an IANA zone like America/Toronto → show its abbreviation
+          setTimeZoneLabel(abbrFor(tz))
+        } else {
+          // Saved as a code like EDT/CET/etc. → show as-is
+          setTimeZoneLabel(tz)
+        }
       }
 
       // NEW: unread notifications count
@@ -556,3 +586,4 @@ function BellIcon() {
     </svg>
   )
 }
+
