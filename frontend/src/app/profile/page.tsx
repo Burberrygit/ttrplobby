@@ -65,7 +65,8 @@ export default function ProfileDashboard() {
       const p = await fetchMyProfile()
       if (!mounted) return
       if (p) {
-        setDisplayName(p.display_name ?? '')
+        setDisplayName(p.display_name ?? ''
+        )
         setUsername(p.username ?? '')
         setBio(p.bio ?? '')
         setAvatarUrl(p.avatar_url ?? '')
@@ -158,6 +159,8 @@ export default function ProfileDashboard() {
   }, [])
 
   const imgSrc = (avatarUrl && avatarUrl.trim()) ? avatarUrl : '/logo.png'
+  const isFallback = !(avatarUrl && avatarUrl.trim()) // NEW: detect fallback
+  const avatarSizeClass = isFallback ? 'h-10 w-10 md:h-12 md:w-12' : 'h-20 w-20 md:h-24 md:w-24' // NEW: 50% size if fallback
 
   if (loading) {
     return (
@@ -198,7 +201,7 @@ export default function ProfileDashboard() {
                 <img
                   src={imgSrc}
                   alt="Avatar"
-                  className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover ring-2 ring-white/10"
+                  className={`${avatarSizeClass} rounded-2xl object-cover ring-2 ring-white/10`} {/* NEW: conditional size */}
                 />
                 {/* online dot */}
                 <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 ring-2 ring-zinc-900" title="Online" />
