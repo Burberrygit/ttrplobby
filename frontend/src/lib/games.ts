@@ -12,12 +12,13 @@ export type Game = {
   seats: number
   length_min: number | null
   vibe: string | null
-  description: string | null           // <-- added
+  description: string | null           // <-- added previously
   welcomes_new: boolean
   is_mature: boolean
   created_at: string
   updated_at: string
   players_count?: number
+  time_zone: string | null             // <-- NEW: store EST/GMT/etc or UTC±HH:MM
 }
 
 export async function requireUserId(): Promise<string> {
@@ -39,9 +40,10 @@ export async function createGame(input: Partial<Game>): Promise<string> {
     seats: input.seats ?? 5,
     length_min: input.length_min ?? null,
     vibe: input.vibe ?? null,
-    description: input.description ?? null,   // <-- added
+    description: input.description ?? null,   // keep description
     welcomes_new: input.welcomes_new ?? true,
     is_mature: input.is_mature ?? false,
+    time_zone: input.time_zone ?? null,       // <-- include time_zone on insert
   }
   const { data, error } = await supabase
     .from('games')
@@ -71,9 +73,10 @@ export async function updateGame(gameId: string, patch: Partial<Game>): Promise<
       seats: patch.seats !== undefined ? patch.seats : undefined,
       length_min: patch.length_min !== undefined ? patch.length_min : undefined,
       vibe: patch.vibe !== undefined ? patch.vibe : undefined,
-      description: patch.description !== undefined ? patch.description : undefined,   // <-- added
+      description: patch.description !== undefined ? patch.description : undefined,
       welcomes_new: patch.welcomes_new !== undefined ? patch.welcomes_new : undefined,
       is_mature: patch.is_mature !== undefined ? patch.is_mature : undefined,
+      time_zone: patch.time_zone !== undefined ? patch.time_zone : undefined, // <-- update time_zone
     })
     .eq('id', gameId)
   if (error) throw error
@@ -83,7 +86,7 @@ export async function fetchOpenGames(): Promise<Game[]> {
   await requireUserId()
   const { data, error } = await supabase
     .from('games')
-    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count)') // <-- description added
+    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at,time_zone, game_players(count)') // <-- time_zone + description
     .eq('status', 'open')
     .order('scheduled_at', { ascending: true })
     .limit(100)
@@ -100,7 +103,7 @@ export async function fetchGame(id: string): Promise<Game | null> {
   await requireUserId()
   const { data, error } = await supabase
     .from('games')
-    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count)') // <-- description added
+    .select('id,host_id,title,system,poster_url,scheduled_at,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at,time_zone, game_players(count)') // <-- time_zone + description
     .eq('id', id)
     .maybeSingle()
   if (error) throw error
@@ -174,7 +177,7 @@ export async function fetchMyHostedGames(): Promise<Game[]> {
   const userId = await requireUserId()
   const { data, error } = await supabase
     .from('games')
-    .select('id,host_id,title,system,poster_url,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count)') // <-- description added
+    .select('id,host_id,title,system,poster_url,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at,time_zone, game_players(count)') // <-- time_zone + description
     .eq('host_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -190,7 +193,7 @@ export async function fetchMyJoinedGames(): Promise<Game[]> {
   const userId = await requireUserId()
   const { data, error } = await supabase
     .from('game_players')
-    .select('game:games(id,host_id,title,system,poster_url,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at, game_players(count))') // <-- description added
+    .select('game:games(id,host_id,title,system,poster_url,status,seats,length_min,vibe,description,welcomes_new,is_mature,created_at,updated_at,time_zone, game_players(count))') // <-- time_zone + description
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
