@@ -203,9 +203,18 @@ export default function ApplicationDetailPage() {
   if (!app || !game) return null
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="max-w-3xl mx-auto w-full px-4 py-8">
-        <a href={`/dm/games/${game.id}/apps`} className="text-white/70 hover:text-white">&larr; Back to applications</a>
+    <div className="min-h-screen flex flex-col text-white">
+      <div className="max-w-3xl mx-auto w-full px-4 py-8 flex-1">
+        {/* Top bar — ttrplobby (left) + Profile (right) */}
+        <div className="mb-4 flex items-center justify-between">
+          <a href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
+            <LogoIcon /><span className="font-semibold">ttrplobby</span>
+          </a>
+          <a href="/profile" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
+            <span className="font-semibold">Profile</span>
+          </a>
+        </div>
+
         <h1 className="text-2xl font-bold mt-2">{game.title || 'Untitled game'}</h1>
         <p className="text-white/70">{game.system || 'TTRPG'}</p>
 
@@ -247,6 +256,18 @@ export default function ApplicationDetailPage() {
           {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
         </div>
       </div>
+
+      {/* Pinned footer */}
+      <footer className="border-t border-white/10 px-6">
+        <div className="max-w-3xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
+      </footer>
 
       {/* Accept Modal */}
       {showAccept && (
@@ -352,7 +373,7 @@ function renderDecision(dec: any) {
   const d = dec || {}
   const items: Array<{ k: string; v: any }> = [
     { k: 'accepted_at', v: d.accepted_at },
-    { k: 'declined_at', v: d.declined_at },
+    { k: 'declined_at', v: d.declin ed_at },
     { k: 'details', v: d.details },
     { k: 'discord_invite', v: d.discord_invite },
     { k: 'vtt_link', v: d.vtt_link },
@@ -420,3 +441,11 @@ function isUrl(s: string) {
   try { const u = new URL(s); return Boolean(u.protocol && u.host) } catch { return false }
 }
 
+function LogoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  )
+}
