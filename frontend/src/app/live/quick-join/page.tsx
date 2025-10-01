@@ -10,7 +10,7 @@ const SYSTEMS = [
 ];
 
 // Canonical lengths (minutes) -> shown as hours in UI
-const LENGTHS_MINUTES = [60, 90, 120, 180] as const;
+const LENGTHS_MINUTES = [60, 120, 180, 240, 300, 360, 420, 480] as const;
 
 export default function QuickJoinPage() {
   const router = useRouter();
@@ -36,20 +36,12 @@ export default function QuickJoinPage() {
       <main className="max-w-4xl mx-auto w-full px-4 py-8 flex-1">
         <TopBanner />
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
           <div>
             <h1 className="text-2xl font-bold">Quick join a live game</h1>
             <p className="text-white/70 mt-1">
               Pick your preferences. We’ll search open tables on the next screen.
             </p>
-          </div>
-          <div className="flex gap-2">
-            <a
-              href="/profile"
-              className="px-3 py-1.5 rounded-lg border border-white/20 hover:border-white/40"
-            >
-              Profile
-            </a>
           </div>
         </div>
 
@@ -61,7 +53,7 @@ export default function QuickJoinPage() {
               <li>• <span className="text-white/90">System</span>: exact match</li>
               <li>• <span className="text-white/90">New-player friendly</span>: respected when possible</li>
               <li>• <span className="text-white/90">18+ content</span>: respected when possible</li>
-              <li>• <span className="text-white/90">Length</span>: canonical values (1.0, 1.5, 2.0, 3.0 hours)</li>
+              <li>• <span className="text-white/90">Length</span>: 1–8 hours</li>
             </ul>
             <div className="mt-3 text-xs text-white/50">
               If nothing matches, you can tweak filters or start a new live game.
@@ -91,7 +83,7 @@ export default function QuickJoinPage() {
                 >
                   {LENGTHS_MINUTES.map(m => (
                     <option key={m} value={m}>
-                      {(m/60).toFixed(m % 60 === 0 ? 0 : 1)}
+                      {(m/60).toFixed(0)}
                     </option>
                   ))}
                 </select>
@@ -148,13 +140,19 @@ export default function QuickJoinPage() {
 
 function TopBanner() {
   return (
-    <div className="mb-4">
+    <div className="mb-4 flex items-center justify-between">
       <a
         href="/"
         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
       >
         <LogoIcon />
         <span className="font-semibold">ttrplobby</span>
+      </a>
+      <a
+        href="/profile"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+      >
+        Profile
       </a>
     </div>
   );
@@ -168,3 +166,4 @@ function LogoIcon() {
     </svg>
   );
 }
+
