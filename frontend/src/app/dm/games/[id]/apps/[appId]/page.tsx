@@ -145,7 +145,7 @@ export default function ApplicationDetailPage() {
     } catch (e: any) {
       setErrorMsg(e?.message || 'Failed to accept application')
     } finally {
-      setBusy(false)
+           setBusy(false)
     }
   }
 
@@ -373,7 +373,7 @@ function renderDecision(dec: any) {
   const d = dec || {}
   const items: Array<{ k: string; v: any }> = [
     { k: 'accepted_at', v: d.accepted_at },
-    { k: 'declined_at', v: d.declin ed_at },
+    { k: 'declined_at', v: d.declined_at },
     { k: 'details', v: d.details },
     { k: 'discord_invite', v: d.discord_invite },
     { k: 'vtt_link', v: d.vtt_link },
