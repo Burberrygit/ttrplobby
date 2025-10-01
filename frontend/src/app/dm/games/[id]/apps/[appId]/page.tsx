@@ -213,7 +213,7 @@ export default function ApplicationDetailPage() {
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="px-2 py-0.5 rounded-lg border border-white/20">Status: {app.status}</span>
             {typeof app.fit_score === 'number' ? <span className="px-2 py-0.5 rounded-lg border border-white/20">Fit {app.fit_score}</span> : null}
-            <span className="text-white/60">Applied {new Date(app.created_at).toLocaleString()}</span>
+            <span className="text-white/60">Applied {formatDateTime(app.created_at)}</span>
           </div>
 
           {/* Applicant Answers (human-readable, no code blocks) */}
@@ -329,7 +329,11 @@ function renderAnswers(ans: any) {
   if (!ans || typeof ans !== 'object') {
     return <div className="text-sm text-white/70">No answers provided.</div>
   }
-  const entries = Object.entries(ans).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+  const entries = Object.entries(ans).filter(
+    ([k, v]) =>
+      k !== 'playstyle' && // remove Playstyle section entirely
+      v !== null && v !== undefined && String(v).trim() !== ''
+  )
   if (!entries.length) return <div className="text-sm text-white/70">No answers provided.</div>
 
   return (
@@ -364,7 +368,7 @@ function renderDecision(dec: any) {
           <dt className="text-xs uppercase tracking-wide text-white/60">{labelForKey(k)}</dt>
           <dd className="mt-0.5 text-sm break-words">
             {k === 'accepted_at' || k === 'declined_at'
-              ? new Date(String(v)).toLocaleString()
+              ? formatDateTime(v)
               : isUrl(String(v))
                 ? <a href={String(v)} target="_blank" rel="noreferrer" className="underline hover:text-white">{String(v)}</a>
                 : String(v)}
@@ -398,8 +402,21 @@ function formatAnswer(k: string, v: any) {
   return String(v)
 }
 
+function formatDateTime(input: any) {
+  try {
+    return new Date(String(input)).toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return String(input)
+  }
+}
+
 function isUrl(s: string) {
   try { const u = new URL(s); return Boolean(u.protocol && u.host) } catch { return false }
 }
-
 
