@@ -357,7 +357,12 @@ export default function ApplyPage() {
             <LogoIcon />
             <span className="font-semibold">ttrplobby</span>
           </a>
-          <a href="/profile" className="text-white/70 hover:text-white">Profile</a>
+          <a
+            href="/profile"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+          >
+            <span className="font-semibold">Profile</span>
+          </a>
         </div>
       </div>
 
@@ -507,4 +512,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
