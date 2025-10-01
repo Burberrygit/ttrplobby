@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { createGame } from '@/lib/games'
+import { createGame, Game } from '@/lib/games'
 
 export default function NewSchedulePage() {
   const router = useRouter()
@@ -108,7 +108,8 @@ export default function NewSchedulePage() {
       // Normalize the zone to save (abbr or UTC±HH:MM). For Auto, store detected abbr (or UTC).
       const time_zone = timeZoneSel === '__auto__' ? (autoAbbr || 'UTC') : timeZoneSel
 
-      const id = await createGame({
+      // Use an intermediate variable with an extended type to avoid excess property checks
+      const payload: Partial<Game> & { time_zone?: string } = {
         title: title || 'Untitled game',
         system,
         poster_url: poster_url ?? null,
@@ -120,7 +121,9 @@ export default function NewSchedulePage() {
         description,               
         status: 'open',
         time_zone, // NEW
-      })
+      }
+
+      const id = await createGame(payload)
       router.push(`/lobbies/${id}`)
     } catch (e: any) {
       setErrorMsg(e?.message || 'Failed to create game')
@@ -467,4 +470,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
