@@ -157,9 +157,7 @@ export default function ProfileDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const imgSrc =
-    avatarUrl?.trim() ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName || username || 'Player')}&background=0B0B0E&color=FFFFFF`
+  const imgSrc = (avatarUrl && avatarUrl.trim()) ? avatarUrl : '/logo.png'
 
   if (loading) {
     return (
@@ -553,3 +551,4 @@ function BellIcon() {
     </svg>
   )
 }
+
