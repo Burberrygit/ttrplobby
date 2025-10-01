@@ -13,7 +13,7 @@ type Game = {
   seats: number | null
   welcomes_new: boolean | null
   is_mature: boolean | null
-  time_zone?: string | null   -- may be IANA or an abbr in some older rows
+  time_zone?: string | null   // may be IANA or an abbr in some older rows
 }
 
 export default function ApplyPage() {
@@ -452,4 +452,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
