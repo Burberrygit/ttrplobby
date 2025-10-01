@@ -248,14 +248,16 @@ export default function NewSchedulePage() {
                 </select>
               </Field>
 
-              <Field label="Vibe (short description)">
+              {/* Vibe with smaller label→input gap */}
+              <label className="grid gap-0.5 text-sm">
+                <span className="text-white/70">Vibe (short description)</span>
                 <input
                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                   value={vibe}
                   onChange={e=>setVibe(e.target.value)}
                   placeholder="Casual, rules-light, beginner friendly"
                 />
-              </Field>
+              </label>
 
               {/* Time zone — placed parallel to Vibe */}
               <Field label="Time zone">
@@ -484,3 +486,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
