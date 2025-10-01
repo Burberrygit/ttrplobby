@@ -275,10 +275,14 @@ export default function LiveHostSetup() {
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
                   >
                     {/* enforce canonical lengths */}
-                    <option value={60}>1.0</option>
-                    <option value={90}>1.5</option>
-                    <option value={120}>2.0</option>
-                    <option value={180}>3.0</option>
+                    <option value={60}>1</option>
+                    <option value={120}>2</option>
+                    <option value={180}>3</option>
+                    <option value={240}>4</option>
+                    <option value={300}>5</option>
+                    <option value={360}>6</option>
+                    <option value={420}>7</option>
+                    <option value={480}>8</option>
                   </select>
                 </label>
 
@@ -385,4 +389,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
