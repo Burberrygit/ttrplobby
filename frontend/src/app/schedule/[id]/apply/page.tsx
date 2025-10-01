@@ -28,7 +28,6 @@ export default function ApplyPage() {
   // Quick-apply form state (core pack)
   const [timezone, setTimezone] = useState<string>('')
   const [experience, setExperience] = useState<string>('New to system')
-  const [playstyle, setPlaystyle] = useState<number>(3)
   const [notes, setNotes] = useState<string>('')
 
   useEffect(() => {
@@ -50,37 +49,29 @@ export default function ApplyPage() {
     })()
   }, [id])
 
-  function computeFit(g: Game, opts: { timezone: string; experience: string; playstyle: number }): number {
+  function computeFit(g: Game, opts: { timezone: string; experience: string }): number {
     let score = 0
 
-    // ---- Experience (0–50)
-    // New gets a bonus if table is new-player friendly.
+    // ---- Experience (0–70)
     const exp = (opts.experience || '').toLowerCase()
-    if (exp.includes('very')) score += 45
-    else if (exp.includes('some')) score += 35
+    if (exp.includes('very')) score += 65
+    else if (exp.includes('some')) score += 50
     else {
-      score += g.welcomes_new ? 30 : 20
-      if (g.welcomes_new) score += 5 // small newbie-friendly bonus
+      score += g.welcomes_new ? 45 : 35
+      if (g.welcomes_new) score += 5
     }
 
-    // ---- Playstyle (0–30)
-    // Scale 1..5 → 0..30 (we don’t know GM’s preference yet; treat clarity as signal)
-    const p = Math.max(1, Math.min(5, Number(opts.playstyle) || 3))
-    score += ((p - 1) / 4) * 30
-
-    // ---- Time zone (0–20)
-    // Exact tz match gets full, otherwise partial if provided.
+    // ---- Time zone (0–30)
     const gtz = (g.time_zone || '').trim().toLowerCase()
     const ptz = (opts.timezone || '').trim().toLowerCase()
     if (gtz && ptz) {
-      score += gtz === ptz ? 20 : 10
+      score += gtz === ptz ? 30 : 15
     } else if (ptz) {
-      score += 8
+      score += 12
     } else {
-      score += 5 // unknown tz still gets a tiny baseline
+      score += 8
     }
 
-    // Clamp + round
     return Math.max(0, Math.min(100, Math.round(score)))
   }
 
@@ -96,7 +87,7 @@ export default function ApplyPage() {
       }
       if (!game) throw new Error('Game not loaded')
 
-      const fit_score = computeFit(game, { timezone, experience, playstyle })
+      const fit_score = computeFit(game, { timezone, experience })
 
       const payload = {
         listing_id: id,
@@ -106,7 +97,6 @@ export default function ApplyPage() {
         answers: {
           timezone,
           experience,
-          playstyle, // 1–5 slider
           notes,
         },
       }
@@ -144,81 +134,109 @@ export default function ApplyPage() {
   }
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="max-w-2xl mx-auto px-4 py-10">
-        <a href="/schedule" className="text-white/70 hover:text-white">&larr; Back to search</a>
-        <div className="mt-4 rounded-2xl border border-white/10 overflow-hidden">
-          <div className="h-36 bg-cover bg-center" style={{ backgroundImage: `url(${game.poster_url || '/game-poster-fallback.jpg'})` }} />
-          <div className="p-5 bg-zinc-900/80">
-            <h1 className="text-2xl font-bold">{game.title || 'Untitled game'}</h1>
-            <div className="text-white/60">{game.system || 'TTRPG'}</div>
-
-            <form onSubmit={onSubmit} className="mt-5 grid gap-4">
-              <label className="grid gap-1 text-sm">
-                <span className="text-white/70">Your time zone</span>
-                <input
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  placeholder="e.g., America/Toronto"
-                  className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-                  required
-                />
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                <span className="text-white/70">Experience with this system</span>
-                <select
-                  value={experience}
-                  onChange={(e) => setExperience(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-                >
-                  <option>New to system</option>
-                  <option>Some experience</option>
-                  <option>Very experienced</option>
-                </select>
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                <span className="text-white/70">Playstyle (1 = Combat, 5 = Roleplay)</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={5}
-                  value={playstyle}
-                  onChange={(e) => setPlaystyle(parseInt(e.target.value, 10))}
-                />
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                <span className="text-white/70">Notes (character concept, availability, safety prefs)</span>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={5}
-                  className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-                />
-              </label>
-
-              {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
-              {okMsg && <div className="text-sm text-emerald-400">{okMsg}</div>}
-
-              <div className="flex items-center gap-3">
-                <button
-                  disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
-                >
-                  {submitting ? 'Submitting…' : 'Submit application'}
-                </button>
-                <a href="/schedule" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
-              </div>
-            </form>
-          </div>
+    <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
+      {/* Top bar: ttrplobby button (left) and Back to search (right) */}
+      <div className="px-4 pt-6">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
+          >
+            <LogoIcon />
+            <span className="font-semibold">ttrplobby</span>
+          </a>
+          <a href="/schedule" className="text-white/70 hover:text-white">&larr; Back to search</a>
         </div>
-
-        <footer className="mt-8 text-sm text-white/60">
-          By applying, you agree to follow our community rules and the GM’s table rules.
-        </footer>
       </div>
+
+      {/* Main */}
+      <main className="flex-1">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <div className="mt-2 rounded-2xl border border-white/10 overflow-hidden">
+            <div className="h-36 bg-cover bg-center" style={{ backgroundImage: `url(${game.poster_url || '/game-poster-fallback.jpg'})` }} />
+            <div className="p-5 bg-zinc-900/80">
+              <h1 className="text-2xl font-bold">{game.title || 'Untitled game'}</h1>
+              <div className="text-white/60">{game.system || 'TTRPG'}</div>
+
+              <form onSubmit={onSubmit} className="mt-5 grid gap-4">
+                <label className="grid gap-1 text-sm">
+                  <span className="text-white/70">Your time zone</span>
+                  <input
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    placeholder="e.g., America/Toronto"
+                    className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                    required
+                  />
+                </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="text-white/70">Experience with this system</span>
+                  <select
+                    value={experience}
+                    onChange={(e) => setExperience(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                  >
+                    <option>New to system</option>
+                    <option>Some experience</option>
+                    <option>Very experienced</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="text-white/70">Notes (character concept, availability, safety prefs)</span>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={10}
+                    className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
+                    placeholder="Tell the GM what you’re hoping for from this table…"
+                  />
+                </label>
+
+                {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
+                {okMsg && <div className="text-sm text-emerald-400">{okMsg}</div>}
+
+                <div className="flex items-center gap-3">
+                  <button
+                    disabled={submitting}
+                    className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
+                  >
+                    {submitting ? 'Submitting…' : 'Submit application'}
+                  </button>
+                  <a href="/schedule" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <p className="mt-6 text-sm text-white/60">
+            By applying, you agree to follow our community rules and the GM’s table rules.
+          </p>
+        </div>
+      </main>
+
+      {/* Pinned footer */}
+      <footer className="border-t border-white/10 px-6">
+        <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>© 2025 ttrplobby</div>
+          <nav className="flex items-center gap-4">
+            <a href="/terms" className="hover:text-white">Terms</a>
+            <a href="/privacy" className="hover:text-white">Privacy</a>
+            <a href="/contact" className="hover:text-white">Contact</a>
+          </nav>
+        </div>
+      </footer>
     </div>
   )
 }
+
+function LogoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  )
+}
+
