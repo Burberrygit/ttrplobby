@@ -275,21 +275,29 @@ export default function NewSchedulePage() {
                 <span className="text-xs text-white/50 mt-1">Pick EST, GMT, CET, JST, etc — or use Auto.</span>
               </Field>
 
-              {/* New players + 18+ side-by-side (explicit same row) */}
-              <div className="md:col-span-2 grid grid-cols-2 gap-6">
-                <Field label="New players welcome?">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e=>setWelcomesNew(e.target.checked)} />
-                    <span>Yes</span>
-                  </label>
-                </Field>
+              {/* New players + 18+ directly beside each other on one line */}
+              <div className="md:col-span-2 flex items-center gap-10">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <span className="text-white/70">New players welcome?</span>
+                  <input
+                    type="checkbox"
+                    className="accent-brand"
+                    checked={welcomesNew}
+                    onChange={e=>setWelcomesNew(e.target.checked)}
+                  />
+                  <span>Yes</span>
+                </label>
 
-                <Field label="18+ content?">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="accent-brand" checked={isMature} onChange={e=>setIsMature(e.target.checked)} />
-                    <span>Yes</span>
-                  </label>
-                </Field>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <span className="text-white/70">18+ content?</span>
+                  <input
+                    type="checkbox"
+                    className="accent-brand"
+                    checked={isMature}
+                    onChange={e=>setIsMature(e.target.checked)}
+                  />
+                  <span>Yes</span>
+                </label>
               </div>
 
               {/* Description */}
