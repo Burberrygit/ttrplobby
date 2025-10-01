@@ -216,19 +216,21 @@ export default function ApplicationDetailPage() {
             <span className="text-white/60">Applied {new Date(app.created_at).toLocaleString()}</span>
           </div>
 
+          {/* Applicant Answers (human-readable, no code blocks) */}
           <section>
             <h2 className="text-sm font-semibold">Applicant Answers</h2>
-            <pre className="mt-2 text-xs bg-black/40 rounded-xl p-3 overflow-auto border border-white/10">
-{JSON.stringify(app.answers || {}, null, 2)}
-            </pre>
+            <div className="mt-2 rounded-xl bg-black/30 border border-white/10 p-3">
+              {renderAnswers(app.answers)}
+            </div>
           </section>
 
+          {/* Decision (human-readable, no code blocks) */}
           {app.dm_decision ? (
             <section>
               <h2 className="text-sm font-semibold">Decision</h2>
-              <pre className="mt-2 text-xs bg-black/40 rounded-xl p-3 overflow-auto border border-white/10">
-{JSON.stringify(app.dm_decision, null, 2)}
-              </pre>
+              <div className="mt-2 rounded-xl bg-black/30 border border-white/10 p-3">
+                {renderDecision(app.dm_decision)}
+              </div>
             </section>
           ) : null}
 
@@ -320,4 +322,84 @@ export default function ApplicationDetailPage() {
     </div>
   )
 }
+
+/* ---------------------------- render helpers ---------------------------- */
+
+function renderAnswers(ans: any) {
+  if (!ans || typeof ans !== 'object') {
+    return <div className="text-sm text-white/70">No answers provided.</div>
+  }
+  const entries = Object.entries(ans).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+  if (!entries.length) return <div className="text-sm text-white/70">No answers provided.</div>
+
+  return (
+    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+      {entries.map(([k, v]) => (
+        <div key={k} className="min-w-0">
+          <dt className="text-xs uppercase tracking-wide text-white/60">{labelForKey(k)}</dt>
+          <dd className="mt-0.5 text-sm break-words">{formatAnswer(k, v)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function renderDecision(dec: any) {
+  const d = dec || {}
+  const items: Array<{ k: string; v: any }> = [
+    { k: 'accepted_at', v: d.accepted_at },
+    { k: 'declined_at', v: d.declined_at },
+    { k: 'details', v: d.details },
+    { k: 'discord_invite', v: d.discord_invite },
+    { k: 'vtt_link', v: d.vtt_link },
+    { k: 'message', v: d.message },
+  ].filter(x => x.v !== null && x.v !== undefined && String(x.v).trim() !== '')
+
+  if (!items.length) return <div className="text-sm text-white/70">No decision details.</div>
+
+  return (
+    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+      {items.map(({ k, v }) => (
+        <div key={k} className="min-w-0">
+          <dt className="text-xs uppercase tracking-wide text-white/60">{labelForKey(k)}</dt>
+          <dd className="mt-0.5 text-sm break-words">
+            {k === 'accepted_at' || k === 'declined_at'
+              ? new Date(String(v)).toLocaleString()
+              : isUrl(String(v))
+                ? <a href={String(v)} target="_blank" rel="noreferrer" className="underline hover:text-white">{String(v)}</a>
+                : String(v)}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function labelForKey(k: string) {
+  switch (k) {
+    case 'notes': return 'Notes'
+    case 'timezone': return 'Time zone'
+    case 'playstyle': return 'Playstyle'
+    case 'experience': return 'Experience'
+    case 'accepted_at': return 'Accepted at'
+    case 'declined_at': return 'Declined at'
+    case 'details': return 'Details'
+    case 'discord_invite': return 'Discord invite'
+    case 'vtt_link': return 'Virtual Tabletop'
+    case 'message': return 'Message'
+    default:
+      return k.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+}
+
+function formatAnswer(k: string, v: any) {
+  if (k === 'playstyle' && typeof v === 'number') return `${v}/5`
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  return String(v)
+}
+
+function isUrl(s: string) {
+  try { const u = new URL(s); return Boolean(u.protocol && u.host) } catch { return false }
+}
+
 
