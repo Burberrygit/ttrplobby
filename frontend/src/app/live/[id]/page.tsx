@@ -65,13 +65,16 @@ function useGeoPresence(roomId: string) {
         if (!user || cancelled) return
         if (!('geolocation' in navigator)) return
 
+        // ✅ Capture once so TypeScript knows it's not null
+        const userId = user.id
+
         async function upsert(lat: number, lon: number) {
           // Requires UNIQUE index on (user_id, room_id) for stable upserts
           await supabase
             .from('live_presence')
             .upsert(
               {
-                user_id: user.id,
+                user_id: userId,
                 room_id: roomId,
                 lat,
                 lon,
