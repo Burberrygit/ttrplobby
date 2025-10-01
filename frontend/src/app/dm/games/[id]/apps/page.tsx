@@ -140,8 +140,8 @@ export default function DMAppsPage() {
   return (
     <div className="min-h-screen flex flex-col text-white">
       <div className="max-w-6xl mx-auto w-full px-4 py-8 flex-1">
-        {/* Header: poster on the LEFT, title block on the RIGHT */}
-        <div className="flex items-start gap-4">
+        {/* Header: poster on the LEFT, title block on the RIGHT, bottoms aligned */}
+        <div className="flex items-end gap-4">
           <div className="hidden sm:block">
             {game?.poster_url ? (
               <img
@@ -220,3 +220,4 @@ function AppCard({ a, gameId }: { a: AppRow, gameId: string }) {
     </a>
   )
 }
+
