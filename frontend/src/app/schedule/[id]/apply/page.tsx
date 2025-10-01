@@ -26,7 +26,9 @@ export default function ApplyPage() {
   const [okMsg, setOkMsg] = useState<string | null>(null)
 
   // Quick-apply form state (core pack)
-  const [timezone, setTimezone] = useState<string>('')
+  const [timezone, setTimezone] = useState<string>('')              // selected TZ
+  const [tzOptions, setTzOptions] = useState<string[]>([])          // all TZ options
+  const [autoTz, setAutoTz] = useState<string>('')                  // auto-detected TZ
   const [experience, setExperience] = useState<string>('New to system')
   const [notes, setNotes] = useState<string>('')
 
@@ -48,6 +50,33 @@ export default function ApplyPage() {
       }
     })()
   }, [id])
+
+  // Populate timezone dropdown + auto-detect
+  useEffect(() => {
+    const detected = (() => {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+      } catch {
+        return ''
+      }
+    })()
+    setAutoTz(detected)
+
+    // Use full IANA list if supported, otherwise a sensible fallback set
+    const allZones =
+      (Intl as any).supportedValuesOf?.('timeZone') ??
+      [
+        'UTC','Etc/UTC','Etc/GMT',
+        'America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Phoenix','America/Toronto',
+        'America/Sao_Paulo','Europe/London','Europe/Berlin','Europe/Paris','Europe/Madrid','Europe/Rome',
+        'Europe/Athens','Africa/Johannesburg','Asia/Jerusalem','Asia/Dubai','Asia/Kolkata','Asia/Bangkok',
+        'Asia/Singapore','Asia/Taipei','Asia/Tokyo','Australia/Sydney','Pacific/Auckland'
+      ]
+    setTzOptions([...allZones].sort((a, b) => a.localeCompare(b)))
+
+    // If no selection yet, default to auto-detected (or UTC)
+    setTimezone((tz) => tz || detected || 'UTC')
+  }, [])
 
   function computeFit(g: Game, opts: { timezone: string; experience: string }): number {
     let score = 0
@@ -161,13 +190,27 @@ export default function ApplyPage() {
               <form onSubmit={onSubmit} className="mt-5 grid gap-4">
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Your time zone</span>
-                  <input
+                  <select
                     value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    placeholder="e.g., America/Toronto"
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '__auto__') {
+                        const z = autoTz || 'UTC'
+                        setTimezone(z)
+                      } else {
+                        setTimezone(val)
+                      }
+                    }}
                     className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
                     required
-                  />
+                  >
+                    <option value="__auto__">Auto-detect {autoTz ? `(${autoTz})` : ''}</option>
+                    <optgroup label="IANA time zones">
+                      {tzOptions.map((tz) => (
+                        <option key={tz} value={tz}>{tz}</option>
+                      ))}
+                    </optgroup>
+                  </select>
                 </label>
 
                 <label className="grid gap-1 text-sm">
@@ -190,7 +233,6 @@ export default function ApplyPage() {
                     onChange={(e) => setNotes(e.target.value)}
                     rows={10}
                     className="px-3 py-2 rounded-lg bg-zinc-950 border border-white/10"
-                    placeholder="Tell the GM what you’re hoping for from this table…"
                   />
                 </label>
 
