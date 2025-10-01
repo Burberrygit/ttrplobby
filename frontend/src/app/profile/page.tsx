@@ -441,7 +441,8 @@ function GameCard({
         {/* Make poster clickable to the lobby */}
         <a href={lobbyHref} className="block">
           <img
-            src={game.poster_url || '/game-poster-fallback.jpg'}
+            src={game.poster_url || '/logo.png'}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png' }}
             alt={game.title || 'Game'}
             className="h-40 w-full object-cover"
           />
@@ -551,5 +552,3 @@ function BellIcon() {
     </svg>
   )
 }
-
-
