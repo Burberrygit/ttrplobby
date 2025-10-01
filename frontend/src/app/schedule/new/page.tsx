@@ -254,8 +254,8 @@ export default function NewSchedulePage() {
                 />
               </Field>
 
-              {/* NEW: Time zone (abbr/UTC) — placed across from Vibe */}
-              <Field label="Time zone (abbr)">
+              {/* Time zone — placed parallel to Vibe */}
+              <Field label="Time zone">
                 <select
                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                   value={timeZoneSel}
@@ -272,6 +272,7 @@ export default function NewSchedulePage() {
                 <span className="text-xs text-white/50 mt-1">Pick EST, GMT, CET, JST, etc — or use Auto.</span>
               </Field>
 
+              {/* New players + 18+ on the same row */}
               <Field label="New players welcome?">
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e=>setWelcomesNew(e.target.checked)} />
@@ -470,5 +471,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
