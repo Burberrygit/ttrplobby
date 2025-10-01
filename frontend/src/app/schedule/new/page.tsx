@@ -20,7 +20,7 @@ export default function NewSchedulePage() {
   const [isMature, setIsMature] = useState(false)
   const [description, setDescription] = useState('') // long description
 
-  // NEW: time zone (abbr/UTC) selection
+  // time zone (abbr/UTC) selection
   const [timeZoneSel, setTimeZoneSel] = useState<string>('__auto__')
   const [autoAbbr, setAutoAbbr] = useState<string>('')
 
@@ -120,7 +120,7 @@ export default function NewSchedulePage() {
         is_mature: isMature,
         description,               
         status: 'open',
-        time_zone, // NEW
+        time_zone,
       }
 
       const id = await createGame(payload)
@@ -235,14 +235,17 @@ export default function NewSchedulePage() {
                 />
               </Field>
 
-              {/* Length in HOURS */}
+              {/* Length (Hours) → dropdown 1–8 */}
               <Field label="Length (Hours)">
-                <input
-                  type="number" min={0.5} max={8} step={0.5}
+                <select
                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-white/10"
                   value={lengthHours}
-                  onChange={e=>setLengthHours(parseFloat(e.target.value || '2'))}
-                />
+                  onChange={e=>setLengthHours(parseInt(e.target.value, 10))}
+                >
+                  {[1,2,3,4,5,6,7,8].map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="Vibe (short description)">
@@ -272,22 +275,24 @@ export default function NewSchedulePage() {
                 <span className="text-xs text-white/50 mt-1">Pick EST, GMT, CET, JST, etc — or use Auto.</span>
               </Field>
 
-              {/* New players + 18+ on the same row */}
-              <Field label="New players welcome?">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e=>setWelcomesNew(e.target.checked)} />
-                  <span>Yes</span>
-                </label>
-              </Field>
+              {/* New players + 18+ side-by-side (explicit same row) */}
+              <div className="md:col-span-2 grid grid-cols-2 gap-6">
+                <Field label="New players welcome?">
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input type="checkbox" className="accent-brand" checked={welcomesNew} onChange={e=>setWelcomesNew(e.target.checked)} />
+                    <span>Yes</span>
+                  </label>
+                </Field>
 
-              <Field label="18+ content?">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="accent-brand" checked={isMature} onChange={e=>setIsMature(e.target.checked)} />
-                  <span>Yes</span>
-                </label>
-              </Field>
+                <Field label="18+ content?">
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input type="checkbox" className="accent-brand" checked={isMature} onChange={e=>setIsMature(e.target.checked)} />
+                    <span>Yes</span>
+                  </label>
+                </Field>
+              </div>
 
-              {/* Description: between 18+ and the buttons */}
+              {/* Description */}
               <div className="md:col-span-2">
                 <label className="grid gap-2 text-sm">
                   <span className="text-white/70">Description</span>
@@ -471,3 +476,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
