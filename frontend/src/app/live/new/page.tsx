@@ -202,7 +202,6 @@ export default function LiveHostSetup() {
               <div className="text-sm font-medium mb-2">Poster image</div>
               <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/10 bg-white/5">
                 {localPosterPreview || form.poster_url ? (
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={localPosterPreview || form.poster_url!} alt="Poster" className="w-full h-full object-cover" />
                 ) : (
                   <div className="h-full w-full grid place-items-center text-white/50 text-sm">
