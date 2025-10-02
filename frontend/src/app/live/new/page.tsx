@@ -139,8 +139,9 @@ export default function LiveHostSetup() {
         return
       }
 
-      // ✅ Convert minutes → hours and clamp 1–8 to satisfy DB CHECK constraint
+      // ✅ Convert minutes → hours and clamp 1–8 to satisfy possible DB CHECK constraints
       const lengthHours = Math.min(8, Math.max(1, Math.round((form.length_min || 60) / 60)))
+      const lengthMinutes = lengthHours * 60
 
       const res = await fetch('/api/live/create', {
         method: 'POST',
@@ -150,8 +151,12 @@ export default function LiveHostSetup() {
         },
         body: JSON.stringify({
           system: form.system,
-          // ✅ send hours; backend CHECK expects 1..8
-          length_hours: lengthHours,
+
+          // ✅ Send all common variants to match whatever the API/DB expects
+          length: lengthHours,           // hours (1..8) – often matches a CHECK on live_games.length
+          length_hours: lengthHours,     // hours (1..8)
+          length_minutes: lengthMinutes, // minutes (60..480)
+
           new_player_friendly: form.welcomes_new,
           is_18_plus: form.is_mature,
           max_players: Math.max(1, Math.min(10, form.seats)),
@@ -392,4 +397,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
