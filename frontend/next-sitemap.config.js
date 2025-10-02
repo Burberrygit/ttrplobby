@@ -4,10 +4,9 @@ module.exports = {
   generateRobotsTxt: true,
   sitemapSize: 7000,
 
-  // You’re running next-sitemap from inside `frontend/`
-  // so make the paths explicit and local to this folder:
+  // Run from inside `frontend/`
   outDir: 'public',
-  buildManifestFile: '.next/build-manifest.json', // <-- key fix
-  // Optional: exclude API routes etc.
-  exclude: ['/api/*'],
-};
+  buildManifestFile: './.next/build-manifest.json', // <-- leading ./ matters in some shells
+
+  exclude: ['/api/*']
+}
