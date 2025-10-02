@@ -9,14 +9,30 @@ export const metadata: Metadata = {
     default: 'TTRPLobby - Find & Host TTRPG Games',
     template: '%s | TTRPLobby',
   },
-  description: 'Find a table now or schedule for later.',
+  description:
+    'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
   icons: {
     icon: [
+      { url: '/logo.png', type: 'image/png', sizes: '48x48' },
       { url: '/logo.png', type: 'image/png' },
     ],
-    apple: [
-      { url: '/logo.png' },
-    ],
+    apple: [{ url: '/logo.png' }],
+    shortcut: [{ url: '/logo.png' }],
+  },
+  openGraph: {
+    type: 'website',
+    url: 'https://www.ttrplobby.com',
+    title: 'TTRPLobby - Find & Host TTRPG Games',
+    description:
+      'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
+    images: [{ url: '/logo.png' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'TTRPLobby — Find & Host TTRPG Games',
+    description:
+      'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
+    images: ['/logo.png'],
   },
   alternates: {
     canonical: '/',
@@ -72,4 +88,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 }
+
 
