@@ -7,7 +7,7 @@ module.exports = {
   generateRobotsTxt: true,
   sitemapSize: 7000,
 
-  // Make paths absolute to avoid CWD/monorepo quirks
+  // Absolute paths remove any CWD/monorepo quirks
   outDir: path.resolve(__dirname, 'public'),
   buildManifestFile: path.resolve(__dirname, '.next', 'build-manifest.json'),
 
