@@ -41,6 +41,11 @@ export default function NotificationsPage() {
   const [appCounts, setAppCounts] = useState<Record<string, number>>({})
   const [loadingGames, setLoadingGames] = useState(false)
 
+  // Delete confirmation modal state
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmForId, setConfirmForId] = useState<string | null>(null)
+  const [dontAskAgain, setDontAskAgain] = useState(false)
+
   useEffect(() => {
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -128,6 +133,46 @@ export default function NotificationsPage() {
     })
   }
 
+  // Handle delete icon click
+  const handleDeleteClick = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    const skip = typeof window !== 'undefined' && window.localStorage.getItem('notifSkipDeleteConfirm') === '1'
+    if (skip) {
+      await deleteNotification(id)
+      return
+    }
+    setConfirmForId(id)
+    setDontAskAgain(false)
+    setConfirmOpen(true)
+  }
+
+  // Perform deletion
+  const deleteNotification = async (id: string) => {
+    try {
+      await supabase.from('notifications').delete().eq('id', id)
+      setNotes(prev => prev.filter(n => n.id !== id))
+    } catch (err) {
+      console.error('Failed to delete notification', err)
+    } finally {
+      setConfirmOpen(false)
+      setConfirmForId(null)
+    }
+  }
+
+  // Confirm dialog actions
+  const confirmDelete = async () => {
+    if (!confirmForId) return
+    if (dontAskAgain && typeof window !== 'undefined') {
+      window.localStorage.setItem('notifSkipDeleteConfirm', '1')
+    }
+    await deleteNotification(confirmForId)
+  }
+
+  const cancelDelete = () => {
+    setConfirmOpen(false)
+    setConfirmForId(null)
+  }
+
   return (
     <div className="min-h-screen text-white">
       <div className="max-w-6xl mx-auto w-full px-4 py-8">
@@ -177,11 +222,24 @@ export default function NotificationsPage() {
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleExpand(n.id)}
                     className={`rounded-xl border ${n.read ? 'border-white/10' : 'border-brand'} bg-zinc-900/60 p-4 cursor-pointer`}
                   >
-                    <div className="flex items-start justify-between">
-                      <h3 className="font-medium">{n.title}</h3>
-                      <time className="text-xs text-white/50">{new Date(n.created_at).toLocaleString()}</time>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="font-medium truncate">{n.title}</h3>
+                        <time className="text-xs text-white/50 block">{new Date(n.created_at).toLocaleString()}</time>
+                      </div>
+
+                      {/* Delete "X" button */}
+                      <button
+                        aria-label="Delete notification"
+                        title="Delete notification"
+                        onClick={(e) => handleDeleteClick(e, n.id)}
+                        className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-white/15 hover:border-white/30 hover:bg-white/5 text-white/70 hover:text-white transition"
+                      >
+                        ×
+                      </button>
                     </div>
-                    {n.body ? <p className="text-sm text-white/70 mt-1">{n.body}</p> : null}
+
+                    {n.body ? <p className="text-sm text-white/70 mt-2">{n.body}</p> : null}
 
                     {/* Quick action link */}
                     {n.data?.game_id ? (
@@ -295,6 +353,48 @@ export default function NotificationsPage() {
           </section>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {confirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          aria-modal="true"
+          role="dialog"
+        >
+          <div className="absolute inset-0 bg-black/60" onClick={cancelDelete} />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-white/15 bg-zinc-950 p-5 shadow-2xl">
+            <h2 className="text-lg font-semibold">Delete notification?</h2>
+            <p className="text-sm text-white/70 mt-1">
+              Are you sure you want to delete your notification?
+            </p>
+
+            <label className="mt-4 flex items-center gap-2 text-sm select-none">
+              <input
+                type="checkbox"
+                checked={dontAskAgain}
+                onChange={(e) => setDontAskAgain(e.target.checked)}
+                className="accent-blue-500"
+              />
+              <span>Don’t show again</span>
+            </label>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={cancelDelete}
+                className="px-3 py-1.5 rounded-lg border border-white/15 hover:border-white/30"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
