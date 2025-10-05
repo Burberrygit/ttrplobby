@@ -12,12 +12,11 @@ export const metadata: Metadata = {
   description:
     'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
   icons: {
-    icon: [
-      { url: '/logo.png', type: 'image/png', sizes: '48x48' },
-      { url: '/logo.png', type: 'image/png' },
-    ],
+    // Use the uploaded favicon for Google search results and browser UI
+    icon: [{ url: '/favicon.ico' }],
+    shortcut: [{ url: '/favicon.ico' }],
+    // Keep apple touch icon as a PNG for best iOS support (can swap later if you add an apple-touch-icon.png)
     apple: [{ url: '/logo.png' }],
-    shortcut: [{ url: '/logo.png' }],
   },
   openGraph: {
     type: 'website',
