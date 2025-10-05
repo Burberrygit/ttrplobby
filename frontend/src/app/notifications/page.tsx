@@ -149,7 +149,12 @@ export default function NotificationsPage() {
   // Perform deletion
   const deleteNotification = async (id: string) => {
     try {
-      await supabase.from('notifications').delete().eq('id', id)
+      // Include user_id to satisfy RLS and ensure true deletion
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .match({ id, user_id: me!.id })
+      if (error) throw error
       setNotes(prev => prev.filter(n => n.id !== id))
     } catch (err) {
       console.error('Failed to delete notification', err)
