@@ -1,3 +1,4 @@
+// frontend/src/app/notifications/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -33,6 +34,7 @@ export default function NotificationsPage() {
   // Notifications
   const [notes, setNotes] = useState<Notification[]>([])
   const [loadingNotes, setLoadingNotes] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   // Hosted games
   const [games, setGames] = useState<Game[]>([])
@@ -117,6 +119,15 @@ export default function NotificationsPage() {
     await loadNotifications()
   }
 
+  const toggleExpand = (id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   return (
     <div className="min-h-screen text-white">
       <div className="max-w-6xl mx-auto w-full px-4 py-8">
@@ -158,17 +169,82 @@ export default function NotificationsPage() {
                 <div className="text-white/60 text-sm">No notifications yet.</div>
               ) : (
                 notes.map(n => (
-                  <article key={n.id} className={`rounded-xl border ${n.read ? 'border-white/10' : 'border-brand'} bg-zinc-900/60 p-4`}>
+                  <article
+                    key={n.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleExpand(n.id)}
+                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleExpand(n.id)}
+                    className={`rounded-xl border ${n.read ? 'border-white/10' : 'border-brand'} bg-zinc-900/60 p-4 cursor-pointer`}
+                  >
                     <div className="flex items-start justify-between">
                       <h3 className="font-medium">{n.title}</h3>
                       <time className="text-xs text-white/50">{new Date(n.created_at).toLocaleString()}</time>
                     </div>
                     {n.body ? <p className="text-sm text-white/70 mt-1">{n.body}</p> : null}
+
+                    {/* Quick action link */}
                     {n.data?.game_id ? (
                       <div className="mt-2">
-                        <a href={`/live/${n.data.game_id}`} className="text-sm text-brand hover:underline">Open game</a>
+                        <a
+                          href={`/lobbies/${n.data.game_id}`}
+                          className="text-sm text-brand hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Open game
+                        </a>
                       </div>
                     ) : null}
+
+                    {/* Details panel toggled by clicking the notification */}
+                    {expanded.has(n.id) && (
+                      <div className="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-sm">
+                        <div>
+                          <span className="text-white/60">Discord: </span>
+                          {n.data?.discord_link ? (
+                            <a
+                              href={n.data.discord_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline hover:opacity-80"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Join Discord
+                            </a>
+                          ) : (
+                            <span className="text-white/40">Not provided</span>
+                          )}
+                        </div>
+                        <div className="mt-1">
+                          <span className="text-white/60">VTT: </span>
+                          {n.data?.vtt_link ? (
+                            <a
+                              href={n.data.vtt_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline hover:opacity-80 break-all"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Open VTT
+                            </a>
+                          ) : (
+                            <span className="text-white/40">Not provided</span>
+                          )}
+                        </div>
+
+                        {n.data?.game_id && (
+                          <div className="mt-3">
+                            <a
+                              href={`/lobbies/${n.data.game_id}`}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand hover:bg-brandHover"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Open game
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </article>
                 ))
               )}
