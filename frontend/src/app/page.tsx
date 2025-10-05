@@ -151,7 +151,7 @@ export default function HomePage() {
 
           <div className="flex items-center gap-2">
             <a href="/signup" className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-sm transition">Sign up</a>
-            <a href="/login" className="px-3 py-1.5 rounded-md bg-indigo-500 hover:bg-indigo-600 text-sm transition">Log in</a>
+            <a href="/login" className="px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-600 text-sm transition">Log in</a>
           </div>
         </div>
       </header>
@@ -161,7 +161,7 @@ export default function HomePage() {
         {/* left pitch */}
         <div>
           <h1 className="text-4xl lg:text-5xl font-extrabold leading-tight">
-            Find a table <span className="text-indigo-400">now</span> or schedule for later.
+            Find a table <span className="text-blue-400">now</span> or schedule for later.
           </h1>
           <p className="mt-4 text-zinc-300 max-w-prose">
             ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.
@@ -169,7 +169,7 @@ export default function HomePage() {
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href="/live/new" className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 font-medium transition shadow-lg shadow-indigo-500/20">Start Live Game</a>
+            <a href="/live/new" className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 font-medium transition shadow-lg shadow-blue-500/20">Start Live Game</a>
             <a href="/schedule/new" className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 font-medium transition">Create Scheduled Game</a>
           </div>
         </div>
@@ -178,7 +178,7 @@ export default function HomePage() {
         <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-4 lg:p-6 shadow-2xl">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-semibold">Find Games to Join</h2>
-            <a href="/schedule?status=open" className="text-sm text-indigo-400 hover:text-indigo-300 transition">Advanced Search Options »</a>
+            <a href="/schedule?status=open" className="text-sm text-blue-400 hover:text-blue-300 transition">Advanced Search Options »</a>
           </div>
 
           <form onSubmit={submitSearch} className="grid gap-3">
@@ -189,7 +189,7 @@ export default function HomePage() {
                 value={keywords}
                 onChange={(e) => setKeywords(e.target.value)}
                 placeholder="e.g. evil, late night"
-                className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
               />
             </label>
 
@@ -197,13 +197,13 @@ export default function HomePage() {
             <div className="grid sm:grid-cols-3 gap-2">
               <label className="text-sm">
                 <div className="mb-1 text-zinc-400">System</div>
-                <select value={system} onChange={(e) => setSystem(e.target.value)} className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition">
+                <select value={system} onChange={(e) => setSystem(e.target.value)} className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 transition">
                   {SYSTEMS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </label>
               <label className="text-sm">
                 <div className="mb-1 text-zinc-400">Sort</div>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition">
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 transition">
                   <option>Relevance</option>
                   <option>Soonest</option>
                   <option>Newest</option>
@@ -212,7 +212,7 @@ export default function HomePage() {
               </label>
               <label className="text-sm">
                 <div className="mb-1 text-zinc-400">Time Zone</div>
-                <select value={tz} onChange={(e) => setTz(e.target.value)} className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition">
+                <select value={tz} onChange={(e) => setTz(e.target.value)} className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 transition">
                   <option value="Any">Any</option>
                   <option value="local">Local (auto: {MY_TZ})</option>
                   {COMMON_TZS.map((z) => <option key={z} value={z}>{z}</option>)}
@@ -228,7 +228,7 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center justify-end">
-              <button type="submit" className="px-3 py-1.5 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white font-medium transition">Search</button>
+              <button type="submit" className="px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition">Search</button>
             </div>
           </form>
 
@@ -239,7 +239,7 @@ export default function HomePage() {
             <div className="mt-3 grid sm:grid-cols-2 gap-3">
               {(loading ? [] : filtered).slice(0, 6).map((g) => <LiveCard key={g.id} g={g} />)}
               {!loading && filtered.length === 0 && (
-                <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-indigo-400 hover:text-indigo-300" href="/live/new">start one</a>.</div>
+                <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-blue-400 hover:text-blue-300" href="/live/new">start one</a>.</div>
               )}
               {loading && [...Array(4)].map((_, i) => <div key={i} className="h-28 rounded-lg border border-white/10 bg-white/5 animate-pulse" />)}
             </div>
@@ -281,7 +281,7 @@ export default function HomePage() {
 function Feature({ title, desc }: { title: string; desc: string }) {
   return (
     <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-4 hover:border-white/20 transition">
-      <div className="text-indigo-400 font-semibold">{title}</div>
+      <div className="text-blue-400 font-semibold">{title}</div>
       <p className="text-zinc-300 text-sm mt-1">{desc}</p>
     </div>
   )
@@ -290,7 +290,7 @@ function Feature({ title, desc }: { title: string; desc: string }) {
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="text-sm flex items-center gap-2 cursor-pointer">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-indigo-500" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-blue-500" />
       <span className="text-zinc-300">{label}</span>
     </label>
   )
@@ -305,7 +305,7 @@ function LiveCard({ g }: { g: Game }) {
       : `${g.length_min} min`
     : '—'
   return (
-    <a href={`/lobbies/${g.id}`} className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:border-indigo-400 transition shadow-md">
+    <a href={`/schedule/${g.id}/apply`} className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:border-blue-400 transition shadow-md">
       <div className="flex gap-3">
         <img src={g.poster_url || '/game-poster-fallback.jpg'} alt={g.title || 'Game poster'} className="h-20 w-28 rounded-md object-cover border border-white/10" />
         <div className="min-w-0">
