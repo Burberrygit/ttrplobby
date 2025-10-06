@@ -35,6 +35,17 @@ export default function ApplyPage() {
   const [experience, setExperience] = useState<string>('New to system')
   const [notes, setNotes] = useState<string>('')
 
+  // --- NEW: client-side guard as belt-and-suspenders ---
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.replace(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
+        return
+      }
+    })()
+  }, [id, router])
+
   useEffect(() => {
     (async () => {
       try {
@@ -297,7 +308,7 @@ export default function ApplyPage() {
     e.preventDefault()
     setSubmitting(true); setErrorMsg(null); setOkMsg(null)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user) } } = await supabase.auth.getUser()
       if (!user) {
         router.push(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
         return
