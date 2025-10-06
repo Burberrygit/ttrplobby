@@ -308,7 +308,7 @@ export default function ApplyPage() {
     e.preventDefault()
     setSubmitting(true); setErrorMsg(null); setOkMsg(null)
     try {
-      const { data: { user) } } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
         return
