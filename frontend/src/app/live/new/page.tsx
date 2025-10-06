@@ -1,8 +1,15 @@
 'use client'
 
+import type { Metadata } from 'next'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+
+export const metadata: Metadata = {
+  // De-emphasize this builder page for search results
+  robots: { index: false, follow: true },
+  alternates: { canonical: '/live/new' },
+}
 
 type NewRoom = {
   title: string
@@ -399,3 +406,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
