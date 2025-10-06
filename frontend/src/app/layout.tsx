@@ -1,4 +1,3 @@
-// File: frontend/src/app/layout.tsx
 import './globals.css'
 import type { Metadata } from 'next'
 import Script from 'next/script'
@@ -11,33 +10,42 @@ export const metadata: Metadata = {
   },
   description:
     'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
-  icons: {
-    // Prefer PNG logo for the browser tab; keep .ico as fallback
-    icon: [
-      { url: '/logo.png?v=2', type: 'image/png', sizes: 'any' },
-      { url: '/favicon.ico' },
-    ],
-    shortcut: [{ url: '/logo.png?v=2' }],
-    apple: [{ url: '/logo.png?v=2' }],
+  alternates: {
+    canonical: '/', // Prefer the homepage for brand queries
   },
   openGraph: {
     type: 'website',
-    url: 'https://www.ttrplobby.com',
+    url: 'https://www.ttrplobby.com/',
+    siteName: 'TTRPLobby',
     title: 'TTRPLobby - Find & Host TTRPG Games',
     description:
-      'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
-    images: [{ url: '/logo.png' }],
+      'Start a live lobby or join one in minutes. D&D 5e, PF2e, and more.',
+    images: [
+      // Ensure this exists in /public (1200×630 recommended). If not, it will fall back to logo.png below.
+      { url: '/og-image.png', width: 1200, height: 630, alt: 'TTRPLobby — Find & Host TTRPG Games' },
+      { url: '/logo.png', width: 512, height: 512, alt: 'TTRPLobby Logo' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'TTRPLobby — Find & Host TTRPG Games',
     description:
-      'ttrplobby lets you find a TTRPG game online in minutes or plan your next campaign. Create an account with Google, or Discord, build your profile, and join a lobby instantly.',
-    images: ['/logo.png'],
+      'Start a live lobby or join one in minutes. D&D 5e, PF2e, and more.',
+    images: ['/og-image.png', '/logo.png'],
   },
-  alternates: {
-    canonical: '/',
+  icons: {
+    // Favicon & icons (Google favicons prefer ≥48×48 and a stable URL)
+    icon: [
+      { url: '/favicon.ico' },                          // multi-size ICO
+      { url: '/icon.svg', type: 'image/svg+xml' },     // optional SVG
+      { url: '/icon-192.png', sizes: '192x192' },      // Android/Chrome
+      { url: '/icon-512.png', sizes: '512x512' },      // PWA large icon
+      { url: '/logo.png?v=2', type: 'image/png' },     // fallback
+    ],
+    apple: [{ url: '/apple-touch-icon.png' }],         // 180×180 recommended
+    shortcut: [{ url: '/favicon.ico' }],
   },
+  themeColor: '#0b0f19',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -89,5 +97,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 }
-
 
