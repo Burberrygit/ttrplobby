@@ -1,15 +1,8 @@
 'use client'
 
-import type { Metadata } from 'next'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-
-export const metadata: Metadata = {
-  // De-emphasize this builder page for search results
-  robots: { index: false, follow: true },
-  alternates: { canonical: '/live/new' },
-}
 
 type NewRoom = {
   title: string
@@ -389,15 +382,6 @@ function HeaderBar() {
   )
 }
 
-function TopBanner() {
-  return (
-    <div className="mb-4">
-      <a href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
-        <LogoIcon /><span className="font-semibold">ttrplobby</span>
-      </a>
-    </div>
-  )
-}
 function LogoIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
