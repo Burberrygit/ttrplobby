@@ -1,4 +1,3 @@
-// frontend/src/app/server-sitemap.xml/route.ts
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
@@ -15,6 +14,7 @@ export async function GET() {
     },
   })
 
+  // Fetch dynamic content for inclusion
   // TODO: adjust table/columns/filters to your schema + RLS
   const [{ data: lobbies }, { data: live }] = await Promise.all([
     sb.from('lobbies').select('id, updated_at').eq('is_public', true).limit(5000),
@@ -23,29 +23,41 @@ export async function GET() {
 
   const entries: { loc: string; lastmod?: string }[] = []
 
+  // --- Static, important pages (ensure homepage is present) ---
+  const now = new Date().toISOString()
+  const staticPages: { loc: string; lastmod?: string }[] = [
+    { loc: `${BASE}/`, lastmod: now },
+    { loc: `${BASE}/about`, lastmod: now },
+    { loc: `${BASE}/schedule`, lastmod: now },
+    { loc: `${BASE}/live/join`, lastmod: now },
+    // Intentionally omit /live/new from sitemap to reduce its prominence in search.
+  ]
+  entries.push(...staticPages)
+
+  // --- Dynamic lobbies ---
   ;(lobbies ?? []).forEach(row => {
     entries.push({
       loc: `${BASE}/lobbies/${row.id}`,
-      lastmod: row.updated_at ?? undefined,
+      lastmod: row.updated_at ?? now,
     })
     entries.push({
       loc: `${BASE}/lobbies/${row.id}/live`,
-      lastmod: row.updated_at ?? undefined,
+      lastmod: row.updated_at ?? now,
     })
   })
 
+  // --- Dynamic live games ---
   ;(live ?? []).forEach(row => {
     entries.push({
       loc: `${BASE}/live/${row.id}`,
-      lastmod: row.updated_at ?? undefined,
+      lastmod: row.updated_at ?? now,
     })
   })
 
-  const now = new Date().toISOString()
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${entries.map(e => `  <url><loc>${e.loc}</loc>${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : `<lastmod>${now}</lastmod>`}</url>`).join('\n')}
+${entries.map(e => `  <url><loc>${e.loc}</loc><lastmod>${e.lastmod || now}</lastmod></url>`).join('\n')}
 </urlset>`
 
-  return new NextResponse(xml, { headers: { 'Content-Type': 'application/xml' } })
+  return new NextResponse(xml, { headers: { 'Content-Type': 'application/xml; charset=UTF-8' } })
 }
