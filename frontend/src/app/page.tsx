@@ -54,6 +54,15 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
+  // --- NEW: track auth to route Live cards appropriately ---
+  const [authed, setAuthed] = useState<boolean | null>(null)
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setAuthed(!!user)
+    })()
+  }, [])
+
   /* ---------- data fetch (unchanged) ---------- */
   useEffect(() => {
     let mounted = true
@@ -237,7 +246,7 @@ export default function HomePage() {
             <h3 className="text-sm uppercase tracking-wide text-zinc-400">Live Now</h3>
             {err && <div className="text-sm text-red-400 mt-2">{err}</div>}
             <div className="mt-3 grid sm:grid-cols-2 gap-3">
-              {(loading ? [] : filtered).slice(0, 6).map((g) => <LiveCard key={g.id} g={g} />)}
+              {(loading ? [] : filtered).slice(0, 6).map((g) => <LiveCard key={g.id} g={g} authed={!!authed} />)}
               {!loading && filtered.length === 0 && (
                 <div className="text-sm text-zinc-400">No live lobbies yet. Be the first to <a className="text-blue-400 hover:text-blue-300" href="/live/new">start one</a>.</div>
               )}
@@ -296,7 +305,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   )
 }
 
-function LiveCard({ g }: { g: Game }) {
+function LiveCard({ g, authed }: { g: Game; authed: boolean }) {
   const remain = Math.max(0, (g.seats ?? 0) - (g.players_count ?? 0))
   const full = remain <= 0 || g.status !== 'open'
   const lengthText = g.length_min
@@ -304,8 +313,10 @@ function LiveCard({ g }: { g: Game }) {
       ? `${(g.length_min / 60).toFixed(g.length_min % 60 ? 1 : 0)} h`
       : `${g.length_min} min`
     : '—'
+  const target = `/schedule/${g.id}/apply`
+  const href = authed ? target : `/login?next=${encodeURIComponent(target)}`
   return (
-    <a href={`/schedule/${g.id}/apply`} className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:border-blue-400 transition shadow-md">
+    <a href={href} className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:border-blue-400 transition shadow-md">
       <div className="flex gap-3">
         <img src={g.poster_url || '/game-poster-fallback.jpg'} alt={g.title || 'Game poster'} className="h-20 w-28 rounded-md object-cover border border-white/10" />
         <div className="min-w-0">
@@ -319,3 +330,4 @@ function LiveCard({ g }: { g: Game }) {
     </a>
   )
 }
+
