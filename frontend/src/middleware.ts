@@ -10,7 +10,9 @@ export async function middleware(req: NextRequest) {
 
   const supabase = createServerClient(url, key, {
     cookies: {
-      getAll() { return req.cookies.getAll() },
+      getAll() {
+        return req.cookies.getAll()
+      },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
           res.cookies.set(name, value, options)
@@ -20,11 +22,22 @@ export async function middleware(req: NextRequest) {
   })
 
   // Touch the session so @supabase/ssr can refresh cookies if needed
-  await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Gate apply pages behind auth
+  const path = req.nextUrl.pathname
+  const isApplyPage = /^\/schedule\/[^/]+\/apply$/.test(path)
+
+  if (isApplyPage && !user) {
+    const loginUrl = new URL('/login', req.url)
+    loginUrl.searchParams.set('next', req.nextUrl.pathname + req.nextUrl.search)
+    return NextResponse.redirect(loginUrl)
+  }
+
   return res
 }
 
 export const config = {
-  // Run for all pages and API routes. If you prefer, narrow this to just pages that need auth.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // Only run where auth is required (faster, clearer)
+  matcher: ['/schedule/:id/apply'],
 }
