@@ -7,6 +7,16 @@ import { supabase } from '@/lib/supabaseClient'
 const CANON = 'www.ttrplobby.com'
 const BASE = `https://${CANON}`
 
+function sanitizeNext(candidate: string | null | undefined): string {
+  if (!candidate) return '/profile'
+  let dec = candidate
+  try { dec = decodeURIComponent(candidate) } catch {}
+  if (!dec.startsWith('/')) return '/profile'
+  // Never allow looping back to the auth pages
+  if (dec.startsWith('/login') || dec.startsWith('/auth')) return '/profile'
+  return dec
+}
+
 export default function LoginClient() {
   const [status, setStatus] = useState('')
   const [user, setUser] = useState<any>(null)
@@ -14,80 +24,56 @@ export default function LoginClient() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  function safePath(candidate: string | null | undefined) {
-    if (!candidate) return '/profile'
-    try {
-      const decoded = decodeURIComponent(candidate)
-      return decoded.startsWith('/') ? decoded : '/profile'
-    } catch {
-      return '/profile'
-    }
-  }
-
   function redirectPostAuth() {
     if (didKick) return
-    const nextFromUrl = searchParams?.get('next')
-    const nextFromStorage =
-      typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') : null
-    const dest = safePath(nextFromUrl || nextFromStorage || '/profile')
+    const dest = sanitizeNext(searchParams?.get('next') || '/profile')
 
-    if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
-
-    // Try client-side navigation first
-    try {
-      router.replace(dest)
-    } catch {}
-
-    // Hard fallback to guarantee we leave /login even if the router is stale
+    // try soft nav first
+    try { router.replace(dest) } catch {}
+    // hard fallback to guarantee leaving /login
     if (typeof window !== 'undefined') {
       setDidKick(true)
       setTimeout(() => {
-        // If we're still on /login, force a navigation
-        if (location.pathname.startsWith('/login')) {
-          location.assign(dest)
-        }
+        if (location.pathname.startsWith('/login')) location.assign(dest)
       }, 60)
     }
   }
 
   useEffect(() => {
-    // Enforce canonical host before kicking off any auth
+    // Ensure canonical host
     if (typeof window !== 'undefined' && window.location.hostname !== CANON) {
       const { protocol, pathname, search } = window.location
       window.location.replace(`${protocol}//${CANON}${pathname}${search}`)
       return
     }
 
-    const n = searchParams?.get('next')
-    if (typeof window !== 'undefined' && n) {
-      sessionStorage.setItem('nextAfterLogin', n)
-    }
-
+    // If already logged in, bounce away immediately
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null
       setUser(u)
       if (u) redirectPostAuth()
     })
+
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       if (session?.user) redirectPostAuth()
     })
     return () => { sub.subscription.unsubscribe() }
-  }, [searchParams, router]) // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   async function handleOAuth(provider: 'google' | 'discord') {
-    if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
-      sessionStorage.setItem('nextAfterLogin', window.location.pathname + window.location.search)
-    }
-    const next =
-      searchParams?.get('next') ||
-      (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
-    const redirect = next
-      ? `${BASE}/auth/callback?next=${encodeURIComponent(safePath(next))}`
-      : `${BASE}/auth/callback`
+    // Compute a safe "next" for after the callback
+    const fromUrl = searchParams?.get('next')
+    const fromRef =
+      typeof document !== 'undefined' && document.referrer.startsWith(`https://${CANON}`)
+        ? new URL(document.referrer).pathname + new URL(document.referrer).search
+        : null
 
+    const next = sanitizeNext(fromUrl || fromRef || '/profile')
+    const redirect = `${BASE}/auth/callback?next=${encodeURIComponent(next)}`
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: redirect }
+      options: { redirectTo: redirect },
     })
     if (error) setStatus(error.message)
   }
@@ -113,13 +99,13 @@ export default function LoginClient() {
             <>
               <div className="mt-2 space-y-2">
                 <button
-                  onClick={()=>handleOAuth('google')}
+                  onClick={() => handleOAuth('google')}
                   className="w-full px-3 py-2 rounded-md bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-200"
                 >
                   Continue with Google
                 </button>
                 <button
-                  onClick={()=>handleOAuth('discord')}
+                  onClick={() => handleOAuth('discord')}
                   className="w-full px-3 py-2 rounded-md bg-[#5865F2] hover:bg-[#4752C4] text-white"
                 >
                   Continue with Discord
