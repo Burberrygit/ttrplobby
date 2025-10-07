@@ -10,15 +10,44 @@ const BASE = `https://${CANON}`
 export default function LoginClient() {
   const [status, setStatus] = useState('')
   const [user, setUser] = useState<any>(null)
+  const [didKick, setDidKick] = useState(false)
   const searchParams = useSearchParams()
   const router = useRouter()
 
+  function safePath(candidate: string | null | undefined) {
+    if (!candidate) return '/profile'
+    try {
+      const decoded = decodeURIComponent(candidate)
+      return decoded.startsWith('/') ? decoded : '/profile'
+    } catch {
+      return '/profile'
+    }
+  }
+
   function redirectPostAuth() {
+    if (didKick) return
     const nextFromUrl = searchParams?.get('next')
-    const nextFromStorage = typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') : null
-    const dest = nextFromUrl || nextFromStorage || '/profile'
+    const nextFromStorage =
+      typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') : null
+    const dest = safePath(nextFromUrl || nextFromStorage || '/profile')
+
     if (typeof window !== 'undefined') sessionStorage.removeItem('nextAfterLogin')
-    router.replace(dest)
+
+    // Try client-side navigation first
+    try {
+      router.replace(dest)
+    } catch {}
+
+    // Hard fallback to guarantee we leave /login even if the router is stale
+    if (typeof window !== 'undefined') {
+      setDidKick(true)
+      setTimeout(() => {
+        // If we're still on /login, force a navigation
+        if (location.pathname.startsWith('/login')) {
+          location.assign(dest)
+        }
+      }, 60)
+    }
   }
 
   useEffect(() => {
@@ -30,7 +59,9 @@ export default function LoginClient() {
     }
 
     const n = searchParams?.get('next')
-    if (typeof window !== 'undefined' && n) sessionStorage.setItem('nextAfterLogin', n)
+    if (typeof window !== 'undefined' && n) {
+      sessionStorage.setItem('nextAfterLogin', n)
+    }
 
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null
@@ -41,7 +72,7 @@ export default function LoginClient() {
       if (session?.user) redirectPostAuth()
     })
     return () => { sub.subscription.unsubscribe() }
-  }, [searchParams, router])
+  }, [searchParams, router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleOAuth(provider: 'google' | 'discord') {
     if (typeof window !== 'undefined' && !sessionStorage.getItem('nextAfterLogin')) {
@@ -51,7 +82,7 @@ export default function LoginClient() {
       searchParams?.get('next') ||
       (typeof window !== 'undefined' ? sessionStorage.getItem('nextAfterLogin') || '' : '')
     const redirect = next
-      ? `${BASE}/auth/callback?next=${encodeURIComponent(next)}`
+      ? `${BASE}/auth/callback?next=${encodeURIComponent(safePath(next))}`
       : `${BASE}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -77,7 +108,7 @@ export default function LoginClient() {
           <h1 className="text-xl font-bold mb-4">Sign in to ttrplobby</h1>
 
           {user ? (
-            <p>Signed in as {user.email}</p>
+            <p>Redirecting…</p>
           ) : (
             <>
               <div className="mt-2 space-y-2">
