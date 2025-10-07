@@ -6,12 +6,12 @@ export const dynamic = 'force-dynamic'
 
 function safeNext(raw: string | null): string {
   if (!raw) return '/profile'
-  try {
-    const dec = decodeURIComponent(raw)
-    return dec.startsWith('/') ? dec : '/profile'
-  } catch {
-    return '/profile'
-  }
+  let dec = raw
+  try { dec = decodeURIComponent(raw) } catch {}
+  // Only allow same-site internal paths, and never bounce back to /login or /auth/*
+  if (!dec.startsWith('/')) return '/profile'
+  if (dec.startsWith('/login') || dec.startsWith('/auth')) return '/profile'
+  return dec
 }
 
 export async function GET(req: Request) {
@@ -21,13 +21,14 @@ export async function GET(req: Request) {
   const supabase = supabaseServer()
 
   if (code) {
+    // Exchange the OAuth code for a session (writes cookies via Next's cookies() adapter)
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
-      // Couldn’t create a session → bounce back to /login with the desired next
+      // If we failed to set a session, send the user back to /login (with a safe next)
       return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(next)}`, url.origin))
     }
   }
 
-  // Always strip ?code from the URL and move on
+  // Always strip ?code from the URL and move on to a safe internal destination
   return NextResponse.redirect(new URL(next, url.origin))
 }
