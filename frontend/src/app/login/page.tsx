@@ -1,4 +1,4 @@
-// File: frontend/src/app/login/page.tsx
+// frontend/src/app/login/page.tsx
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -19,13 +19,7 @@ function safeNext(raw?: string) {
 export default async function Page({ searchParams }: { searchParams?: { next?: string } }) {
   const supabase = supabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
-
   const dest = safeNext(searchParams?.next)
-  if (user) {
-    redirect(dest)
-  }
-
-  // Not signed in → render the login UI (client does the OAuth button work)
+  if (user) redirect(dest)
   return <LoginClient />
 }
-
