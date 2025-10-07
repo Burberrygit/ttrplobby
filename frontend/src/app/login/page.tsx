@@ -1,4 +1,4 @@
-// frontend/src/app/login/page.tsx
+// File: frontend/src/app/login/page.tsx
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
