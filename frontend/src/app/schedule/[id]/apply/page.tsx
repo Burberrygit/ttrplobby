@@ -1,7 +1,7 @@
 // File: frontend/src/app/schedule/[id]/apply/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -14,7 +14,7 @@ type Game = {
   seats: number | null
   welcomes_new: boolean | null
   is_mature: boolean | null
-  time_zone?: string | null   // may be IANA or an abbr in some older rows
+  time_zone?: string | null
   status?: string | null
   length_min?: number | null
   description?: string | null
@@ -24,43 +24,82 @@ type Game = {
 export default function ApplyPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+
   const [game, setGame] = useState<Game | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
 
+  // Auth gate state
+  const [authReady, setAuthReady] = useState(false)
+
   // Form state
-  const [timezone, setTimezone] = useState<string>('__auto__') // selected TZ (abbr/UTC), default auto
-  const [autoAbbr, setAutoAbbr] = useState<string>('')         // auto-detected abbr like "EDT" or "GMT+1"
+  const [timezone, setTimezone] = useState<string>('__auto__')
+  const [autoAbbr, setAutoAbbr] = useState<string>('') // e.g., EDT
   const [experience, setExperience] = useState<string>('New to system')
   const [notes, setNotes] = useState<string>('')
 
-  // --- Client-side guard with hard-redirect fallback ---
+  // ---------- AUTH GUARD WITH RETRIES (prevents /login <-> /apply loop) ----------
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+    let cancelled = false
+    let tries = 0
+
+    // If we just came from /login, give the browser a beat to write the session
+    const cameFromLogin = typeof document !== 'undefined' && document.referrer.includes('/login')
+    const maxTries = cameFromLogin ? 15 : 10        // a little more patience if returning from login
+    const intervalMs = cameFromLogin ? 150 : 120
+
+    async function probeAuth() {
+      if (cancelled) return
+
+      try {
+        const [{ data: userData }, { data: sessionData }] = await Promise.all([
+          supabase.auth.getUser(),
+          supabase.auth.getSession(),
+        ])
+
+        const user = userData?.user ?? sessionData?.session?.user ?? null
+        if (user) {
+          setAuthReady(true)
+          return
+        }
+      } catch {
+        // ignore and retry
+      }
+
+      tries += 1
+      if (tries < maxTries) {
+        setTimeout(probeAuth, intervalMs)
+      } else {
+        // truly not logged in → go to /login with next
         const nextPath = `/schedule/${id}/apply`
         const loginUrl = `/login?next=${encodeURIComponent(nextPath)}`
+        // Prefer soft nav, but force a hard nav as a fallback
         try { router.replace(loginUrl) } catch {}
-        // Ensure navigation even if router is stale
         if (typeof window !== 'undefined') {
-          setTimeout(() => { if (!location.pathname.endsWith('/apply')) location.assign(loginUrl) }, 60)
+          setTimeout(() => {
+            if (!location.pathname.endsWith('/login')) location.assign(loginUrl)
+          }, 50)
         }
-        return
       }
-    })()
+    }
+
+    probeAuth()
+    return () => { cancelled = true }
   }, [id, router])
 
+  // ---------- LOAD GAME (after auth is ready or in parallel is fine) ----------
   useEffect(() => {
-    (async () => {
+    let cancelled = false
+    ;(async () => {
       try {
         const { data, error } = await supabase
           .from('games')
           .select('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone,status,length_min,description,vibe')
           .eq('id', id)
           .single()
+        if (cancelled) return
         if (error) throw error
         setGame(data as Game)
       } catch (e: any) {
@@ -69,9 +108,10 @@ export default function ApplyPage() {
         setLoading(false)
       }
     })()
+    return () => { cancelled = true }
   }, [id])
 
-  // Auto-detect the user's timezone abbreviation (e.g., EDT, GMT+1)
+  // ---------- Time zone helpers ----------
   useEffect(() => {
     try {
       const ab = getAbbrForIana(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC') || 'UTC'
@@ -81,48 +121,17 @@ export default function ApplyPage() {
     }
   }, [])
 
-  // ---- Timezone helpers (abbr-centric) ----
-
-  // Map of common timezone abbreviations to current UTC offset (in minutes).
-  // For DST-sensitive regions, we include both standard and daylight variants.
   const ABBR_TO_OFFSET: Record<string, number> = {
-    // UTC/GMT
     UTC: 0, GMT: 0,
-
-    // North America
-    NST: -210, NDT: -150, // Newfoundland
-    AST: -240, ADT: -180,
-    EST: -300, EDT: -240,
-    CST: -360, CDT: -300,
-    MST: -420, MDT: -360,
-    PST: -480, PDT: -420,
-    AKST: -540, AKDT: -480,
-    HST: -600,
-
-    // Europe
-    WET: 0, WEST: 60,
-    CET: 60, CEST: 120,
-    EET: 120, EEST: 180,
-    MSK: 180,
-
-    // Africa / Middle East (select)
+    NST: -210, NDT: -150, AST: -240, ADT: -180, EST: -300, EDT: -240, CST: -360, CDT: -300,
+    MST: -420, MDT: -360, PST: -480, PDT: -420, AKST: -540, AKDT: -480, HST: -600,
+    WET: 0, WEST: 60, CET: 60, CEST: 120, EET: 120, EEST: 180, MSK: 180,
     SAST: 120, EAT: 180, IRST: 210, IRDT: 270, GST: 240,
-
-    // Asia
-    IST: 330, // India
-    PKT: 300, BST: 360, // Bangladesh
-    ICT: 420, WIB: 420, // Western Indonesia
-    ICT2: 420, // alias
-    MYT: 480, SGT: 480, HKT: 480, CSTCN: 480, // China ("CST" is ambiguous)
-    JST: 540, KST: 540,
-
-    // Australia / NZ
-    AWST: 480, ACST: 570, ACDT: 630, AEST: 600, AEDT: 660,
-    NZST: 720, NZDT: 780,
+    IST: 330, PKT: 300, BST: 360, ICT: 420, WIB: 420, MYT: 480, SGT: 480, HKT: 480, CSTCN: 480,
+    JST: 540, KST: 540, AWST: 480, ACST: 570, ACDT: 630, AEST: 600, AEDT: 660, NZST: 720, NZDT: 780,
   }
 
-  // Options grouped for the dropdown (abbr-first)
-  const TZ_GROUPS: { label: string; options: { value: string; label: string }[] }[] = [
+  const TZ_GROUPS: { label: string; options: { value: string; label: string }[] }[] = useMemo(() => ([
     {
       label: 'Auto',
       options: [{ value: '__auto__', label: `Auto-detect${autoAbbr ? ` (${autoAbbr})` : ''}` }],
@@ -132,7 +141,6 @@ export default function ApplyPage() {
       options: [
         { value: 'UTC', label: 'UTC (±0)' },
         { value: 'GMT', label: 'GMT (±0)' },
-        // Handy UTC offsets
         { value: 'UTC-12:00', label: 'UTC-12:00' },
         { value: 'UTC-11:00', label: 'UTC-11:00' },
         { value: 'UTC-10:00', label: 'UTC-10:00 (HST)' },
@@ -167,60 +175,41 @@ export default function ApplyPage() {
     {
       label: 'North America (abbr)',
       options: [
-        { value: 'EST', label: 'EST (UTC-5)' },
-        { value: 'EDT', label: 'EDT (UTC-4)' },
-        { value: 'CST', label: 'CST (UTC-6)' },
-        { value: 'CDT', label: 'CDT (UTC-5)' },
-        { value: 'MST', label: 'MST (UTC-7)' },
-        { value: 'MDT', label: 'MDT (UTC-6)' },
-        { value: 'PST', label: 'PST (UTC-8)' },
-        { value: 'PDT', label: 'PDT (UTC-7)' },
-        { value: 'AKST', label: 'AKST (UTC-9)' },
-        { value: 'AKDT', label: 'AKDT (UTC-8)' },
-        { value: 'HST', label: 'HST (UTC-10)' },
-        { value: 'AST', label: 'AST (UTC-4)' },
-        { value: 'ADT', label: 'ADT (UTC-3)' },
-        { value: 'NST', label: 'NST (UTC-3:30)' },
+        { value: 'EST', label: 'EST (UTC-5)' }, { value: 'EDT', label: 'EDT (UTC-4)' },
+        { value: 'CST', label: 'CST (UTC-6)' }, { value: 'CDT', label: 'CDT (UTC-5)' },
+        { value: 'MST', label: 'MST (UTC-7)' }, { value: 'MDT', label: 'MDT (UTC-6)' },
+        { value: 'PST', label: 'PST (UTC-8)' }, { value: 'PDT', label: 'PDT (UTC-7)' },
+        { value: 'AKST', label: 'AKST (UTC-9)' }, { value: 'AKDT', label: 'AKDT (UTC-8)' },
+        { value: 'HST', label: 'HST (UTC-10)' }, { value: 'AST', label: 'AST (UTC-4)' },
+        { value: 'ADT', label: 'ADT (UTC-3)' }, { value: 'NST', label: 'NST (UTC-3:30)' },
         { value: 'NDT', label: 'NDT (UTC-2:30)' },
       ],
     },
     {
       label: 'Europe (abbr)',
       options: [
-        { value: 'WET', label: 'WET (UTC+0)' },
-        { value: 'WEST', label: 'WEST (UTC+1)' },
-        { value: 'CET', label: 'CET (UTC+1)' },
-        { value: 'CEST', label: 'CEST (UTC+2)' },
-        { value: 'EET', label: 'EET (UTC+2)' },
-        { value: 'EEST', label: 'EEST (UTC+3)' },
+        { value: 'WET', label: 'WET (UTC+0)' }, { value: 'WEST', label: 'WEST (UTC+1)' },
+        { value: 'CET', label: 'CET (UTC+1)' }, { value: 'CEST', label: 'CEST (UTC+2)' },
+        { value: 'EET', label: 'EET (UTC+2)' }, { value: 'EEST', label: 'EEST (UTC+3)' },
         { value: 'MSK', label: 'MSK (UTC+3)' },
       ],
     },
     {
       label: 'Asia / Pacific (abbr)',
       options: [
-        { value: 'PKT', label: 'PKT (UTC+5)' },
-        { value: 'IST', label: 'IST — India (UTC+5:30)' },
-        { value: 'BST', label: 'BST — Bangladesh (UTC+6)' },
-        { value: 'ICT', label: 'ICT (UTC+7)' },
-        { value: 'SGT', label: 'SGT — Singapore (UTC+8)' },
-        { value: 'HKT', label: 'HKT — Hong Kong (UTC+8)' },
-        { value: 'CSTCN', label: 'CST — China (UTC+8)' },
-        { value: 'JST', label: 'JST (UTC+9)' },
-        { value: 'KST', label: 'KST (UTC+9)' },
-        { value: 'AWST', label: 'AWST (UTC+8)' },
-        { value: 'ACST', label: 'ACST (UTC+9:30)' },
-        { value: 'ACDT', label: 'ACDT (UTC+10:30)' },
-        { value: 'AEST', label: 'AEST (UTC+10)' },
-        { value: 'AEDT', label: 'AEDT (UTC+11)' },
-        { value: 'NZST', label: 'NZST (UTC+12)' },
-        { value: 'NZDT', label: 'NZDT (UTC+13)' },
+        { value: 'PKT', label: 'PKT (UTC+5)' }, { value: 'IST', label: 'IST — India (UTC+5:30)' },
+        { value: 'BST', label: 'BST — Bangladesh (UTC+6)' }, { value: 'ICT', label: 'ICT (UTC+7)' },
+        { value: 'SGT', label: 'SGT — Singapore (UTC+8)' }, { value: 'HKT', label: 'HKT — Hong Kong (UTC+8)' },
+        { value: 'CSTCN', label: 'CST — China (UTC+8)' }, { value: 'JST', label: 'JST (UTC+9)' },
+        { value: 'KST', label: 'KST (UTC+9)' }, { value: 'AWST', label: 'AWST (UTC+8)' },
+        { value: 'ACST', label: 'ACST (UTC+9:30)' }, { value: 'ACDT', label: 'ACDT (UTC+10:30)' },
+        { value: 'AEST', label: 'AEST (UTC+10)' }, { value: 'AEDT', label: 'AEDT (UTC+11)' },
+        { value: 'NZST', label: 'NZST (UTC+12)' }, { value: 'NZDT', label: 'NZDT (UTC+13)' },
       ],
     },
-  ]
+  ]), [autoAbbr])
 
   function parseUtcOffsetLabel(val: string): number | null {
-    // Accept values like "UTC-05:00" or "UTC+9:30"
     const m = /^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(val)
     if (!m) return null
     const sign = m[1] === '-' ? -1 : 1
@@ -229,31 +218,11 @@ export default function ApplyPage() {
     return sign * (hh * 60 + mm)
   }
 
-  function offsetFromSelection(sel: string): number {
-    if (sel === '__auto__') {
-      // auto -> compute from detected IANA zone
-      try {
-        const iana = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-        return offsetMinutesForIana(iana)
-      } catch {
-        return 0
-      }
-    }
-    const utcParsed = parseUtcOffsetLabel(sel)
-    if (utcParsed !== null) return utcParsed
-    if (sel in ABBR_TO_OFFSET) return ABBR_TO_OFFSET[sel]
-    // Fallback: try treat selection as IANA (if ever passed through)
-    try { return offsetMinutesForIana(sel) } catch { return 0 }
-  }
-
   function offsetMinutesForIana(iana: string): number {
-    // Compute current offset minutes for a given IANA zone using formatting
     const now = new Date()
-    // Prefer "shortOffset" if available; fallback to "short" (e.g., "GMT-4")
     const fmt = new Intl.DateTimeFormat('en-US', { timeZone: iana, timeZoneName: 'short' })
     const parts = fmt.formatToParts(now)
     const tzName = parts.find(p => p.type === 'timeZoneName')?.value || 'UTC'
-    // Parse "GMT+/-H" or return 0 if non-GMT abbr (handled elsewhere)
     const m = /^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(tzName)
     if (m) {
       const sign = m[1] === '-' ? -1 : 1
@@ -261,10 +230,8 @@ export default function ApplyPage() {
       const mm = m[3] ? parseInt(m[3], 10) : 0
       return sign * (hh * 60 + mm)
     }
-    // Non-GMT abbr (e.g., "EDT") → approximate via offset of that zone vs UTC
     const utc = now.getTime()
     const zoned = new Date(now.toLocaleString('en-US', { timeZone: iana }))
-    // difference between local (zoned) and UTC in minutes
     return Math.round((zoned.getTime() - utc) / (60 * 1000))
   }
 
@@ -278,36 +245,38 @@ export default function ApplyPage() {
     }
   }
 
+  function offsetFromSelection(sel: string): number {
+    if (sel === '__auto__') {
+      try {
+        const iana = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        return offsetMinutesForIana(iana)
+      } catch { return 0 }
+    }
+    const utcParsed = parseUtcOffsetLabel(sel)
+    if (utcParsed !== null) return utcParsed
+    if (sel in ABBR_TO_OFFSET) return ABBR_TO_OFFSET[sel]
+    try { return offsetMinutesForIana(sel) } catch { return 0 }
+  }
+
   function computeFit(g: Game, opts: { tzSel: string; experience: string }): number {
     let score = 0
-
-    // Experience (0–70)
     const exp = (opts.experience || '').toLowerCase()
     if (exp.includes('very')) score += 65
     else if (exp.includes('some')) score += 50
-    else {
-      score += g.welcomes_new ? 45 : 35
-      if (g.welcomes_new) score += 5
-    }
-
-    // Time zone (0–30) — compare current UTC offsets
+    else { score += g.welcomes_new ? 50 : 35 }
     const playerOffset = offsetFromSelection(opts.tzSel)
     let gameOffset = 0
     if (g.time_zone) {
       const maybeUtc = parseUtcOffsetLabel(g.time_zone.toUpperCase())
       if (maybeUtc !== null) gameOffset = maybeUtc
       else if (g.time_zone.toUpperCase() in ABBR_TO_OFFSET) gameOffset = ABBR_TO_OFFSET[g.time_zone.toUpperCase()]
-      else {
-        // Treat as IANA
-        try { gameOffset = offsetMinutesForIana(g.time_zone) } catch { gameOffset = 0 }
-      }
+      else { try { gameOffset = offsetMinutesForIana(g.time_zone) } catch { gameOffset = 0 } }
     }
     const diff = Math.abs(playerOffset - gameOffset)
     if (diff <= 0) score += 30
     else if (diff <= 60) score += 22
     else if (diff <= 120) score += 15
     else score += 10
-
     return Math.max(0, Math.min(100, Math.round(score)))
   }
 
@@ -324,18 +293,12 @@ export default function ApplyPage() {
       if (!game) throw new Error('Game not loaded')
 
       const fit_score = computeFit(game, { tzSel: timezone, experience })
-
       const payload = {
         listing_id: id,
         player_id: user.id,
         status: 'under_review',
         fit_score,
-        answers: {
-          timezone,          // store selected abbr/UTC string or "__auto__"
-          autoAbbr,          // also store what we detected on the client
-          experience,
-          notes,
-        },
+        answers: { timezone, autoAbbr, experience, notes },
       }
 
       const { error } = await supabase.from('applications').insert(payload)
@@ -350,6 +313,15 @@ export default function ApplyPage() {
     }
   }
 
+  // ---------- UI ----------
+  if (!authReady) {
+    return (
+      <div className="min-h-screen grid place-items-center text-white/80">
+        Checking sign-in…
+      </div>
+    )
+  }
+
   if (loading) {
     return <div className="min-h-screen grid place-items-center text-white/70">Loading…</div>
   }
@@ -357,7 +329,6 @@ export default function ApplyPage() {
     return <div className="min-h-screen grid place-items-center text-red-300">{errorMsg || 'Game not found'}</div>
   }
 
-  // Derived display values to mirror the lobby details card
   const lengthText = game.length_min
     ? (game.length_min >= 60 ? `${(game.length_min / 60).toFixed(game.length_min % 60 ? 1 : 0)} h` : `${game.length_min} min`)
     : '—'
@@ -366,26 +337,17 @@ export default function ApplyPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 text-white">
-      {/* Top bar: ttrplobby button (left) and Profile (right) */}
       <div className="px-4 pt-6">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <a
-            href="/"
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
-          >
-            <LogoIcon />
-            <span className="font-semibold">ttrplobby</span>
+          <a href="/" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
+            <LogoIcon /><span className="font-semibold">ttrplobby</span>
           </a>
-          <a
-            href="/profile"
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition"
-          >
+          <a href="/profile" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:border-white/30 transition">
             <span className="font-semibold">Profile</span>
           </a>
         </div>
       </div>
 
-      {/* Main */}
       <main className="flex-1">
         <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="mt-2 rounded-2xl border border-white/10 overflow-hidden">
@@ -396,7 +358,6 @@ export default function ApplyPage() {
                 {(game.system || 'TTRPG')}{game.vibe ? ` • ${game.vibe}` : ''}
               </div>
 
-              {/* Details (mirror lobby page) */}
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 <Info label="Status" value={titleCase(game.status || 'open')} />
                 <Info label="Length" value={lengthText} />
@@ -405,7 +366,6 @@ export default function ApplyPage() {
                 <Info label="Time zone" value={timeZoneText} />
               </div>
 
-              {/* Description */}
               <div className="mt-6">
                 <h2 className="text-sm font-semibold">Description</h2>
                 <p className="mt-2 text-white/80 whitespace-pre-wrap">
@@ -413,9 +373,7 @@ export default function ApplyPage() {
                 </p>
               </div>
 
-              {/* Application form */}
               <form onSubmit={onSubmit} className="mt-6 grid gap-4">
-                {/* Time zone (abbr/UTC) */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Your time zone</span>
                   <select
@@ -437,7 +395,6 @@ export default function ApplyPage() {
                   </div>
                 </label>
 
-                {/* Experience */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Experience with this system</span>
                   <select
@@ -451,7 +408,6 @@ export default function ApplyPage() {
                   </select>
                 </label>
 
-                {/* Notes */}
                 <label className="grid gap-1 text-sm">
                   <span className="text-white/70">Notes (character concept, availability, safety prefs)</span>
                   <textarea
@@ -465,21 +421,12 @@ export default function ApplyPage() {
                 {errorMsg && <div className="text-sm text-red-400">{errorMsg}</div>}
                 {okMsg && <div className="text-sm text-emerald-400">{okMsg}</div>}
 
-                {/* Buttons row with Back on the left, Submit/Cancel on the right */}
                 <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => router.back()}
-                    className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40"
-                  >
+                  <button type="button" onClick={() => router.back()} className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">
                     Back
                   </button>
                   <div className="flex items-center gap-3">
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60"
-                    >
+                    <button type="submit" disabled={submitting} className="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-medium disabled:opacity-60">
                       {submitting ? 'Submitting…' : 'Submit application'}
                     </button>
                     <a href="/schedule" className="px-4 py-2 rounded-xl border border-white/20 hover:border-white/40">Cancel</a>
@@ -495,7 +442,6 @@ export default function ApplyPage() {
         </div>
       </main>
 
-      {/* Pinned footer */}
       <footer className="border-t border-white/10 px-6">
         <div className="max-w-6xl mx-auto w-full py-6 text-sm text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© 2025 ttrplobby</div>
@@ -531,3 +477,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
