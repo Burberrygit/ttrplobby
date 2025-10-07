@@ -1,4 +1,4 @@
-// frontend/src/app/auth/callback/route.ts
+// File: frontend/src/app/auth/callback/route.ts
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 
@@ -18,12 +18,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const code = url.searchParams.get('code')
   const next = safeNext(url.searchParams.get('next'))
-  const supabase = supabaseServer() // uses your SSR cookie adapter :contentReference[oaicite:0]{index=0}
+  const supabase = supabaseServer()
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
-      // Couldn’t create a session → bounce to /login with next
+      // Couldn’t create a session → bounce back to /login with the desired next
       return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(next)}`, url.origin))
     }
   }
