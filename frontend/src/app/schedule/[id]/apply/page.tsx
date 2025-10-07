@@ -1,3 +1,4 @@
+// File: frontend/src/app/schedule/[id]/apply/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -35,12 +36,18 @@ export default function ApplyPage() {
   const [experience, setExperience] = useState<string>('New to system')
   const [notes, setNotes] = useState<string>('')
 
-  // --- NEW: client-side guard as belt-and-suspenders ---
+  // --- Client-side guard with hard-redirect fallback ---
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        router.replace(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
+        const nextPath = `/schedule/${id}/apply`
+        const loginUrl = `/login?next=${encodeURIComponent(nextPath)}`
+        try { router.replace(loginUrl) } catch {}
+        // Ensure navigation even if router is stale
+        if (typeof window !== 'undefined') {
+          setTimeout(() => { if (!location.pathname.endsWith('/apply')) location.assign(loginUrl) }, 60)
+        }
         return
       }
     })()
@@ -310,7 +317,8 @@ export default function ApplyPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        router.push(`/login?next=${encodeURIComponent(`/schedule/${id}/apply`)}`)
+        const nextPath = `/schedule/${id}/apply`
+        router.push(`/login?next=${encodeURIComponent(nextPath)}`)
         return
       }
       if (!game) throw new Error('Game not loaded')
@@ -523,5 +531,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
