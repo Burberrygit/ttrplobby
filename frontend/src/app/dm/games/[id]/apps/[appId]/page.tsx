@@ -59,16 +59,25 @@ export default function ApplicationDetailPage() {
     ;(async () => {
       try {
         setLoading(true)
-        const { data: g, error: gErr } = await supabase.from('games').select('*').eq('id', id).single()
+        const { data: g, error: gErr } = await supabase
+          .from('games')
+          .select<Game>('*')
+          .eq('id', id)
+          .single()
         if (gErr) throw gErr
+        if (!g) throw new Error('Game not found.')
         if (g.host_id !== me.id) throw new Error('You are not the host of this game.')
-        setGame(g as Game)
+        setGame(g)
 
         const { data: a, error: aErr } = await supabase
-          .from('applications').select('*').eq('id', appId).single()
+          .from('applications')
+          .select<Application>('*')
+          .eq('id', appId)
+          .single()
         if (aErr) throw aErr
+        if (!a) throw new Error('Application not found.')
         if (a.listing_id !== id) throw new Error('Application does not belong to this game.')
-        setApp(a as Application)
+        setApp(a)
       } catch (e: any) {
         setErrorMsg(e?.message || 'Failed to load application')
       } finally {
