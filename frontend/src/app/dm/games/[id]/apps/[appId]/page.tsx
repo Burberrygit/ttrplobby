@@ -3,14 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/database.types'
 
-type Game = {
-  id: string
-  host_id: string
-  title: string | null
-  system: string | null
-  seats: number | null
-}
+type Game = Database['public']['Tables']['games']['Row'];
 
 type Application = {
   id: string
@@ -61,8 +56,9 @@ export default function ApplicationDetailPage() {
         setLoading(true)
         const { data: g, error: gErr } = await supabase
           .from('games')
-          .select<Game>('*')
+          .select('*')
           .eq('id', id)
+          .returns<Game>()
           .single()
         if (gErr) throw gErr
         if (!g) throw new Error('Game not found.')
@@ -71,8 +67,9 @@ export default function ApplicationDetailPage() {
 
         const { data: a, error: aErr } = await supabase
           .from('applications')
-          .select<Application>('*')
+          .select('*')
           .eq('id', appId)
+          .returns<Application>()
           .single()
         if (aErr) throw aErr
         if (!a) throw new Error('Application not found.')
@@ -458,3 +455,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
