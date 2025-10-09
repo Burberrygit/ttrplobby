@@ -45,9 +45,10 @@ export default function ApplyPage() {
     let cancelled = false
     let tries = 0
 
-    // If we just came from /login, give the browser a beat to write the session
-    const cameFromLogin = typeof document !== 'undefined' && document.referrer.includes('/login')
-    const maxTries = cameFromLogin ? 15 : 10        // a little more patience if returning from login
+    // If we just came from /login or /auth/callback, give the browser a beat to write the session
+    const ref = typeof document !== 'undefined' ? document.referrer : ''
+    const cameFromLogin = ref.includes('/login') || ref.includes('/auth/callback')
+    const maxTries = cameFromLogin ? 15 : 10        // a little more patience if returning from login/callback
     const intervalMs = cameFromLogin ? 150 : 120
 
     async function probeAuth() {
@@ -79,7 +80,7 @@ export default function ApplyPage() {
         try { router.replace(loginUrl) } catch {}
         if (typeof window !== 'undefined') {
           setTimeout(() => {
-            if (!location.pathname.endsWith('/login')) location.assign(loginUrl)
+            if (!location.pathname.startsWith('/login')) location.assign(loginUrl)
           }, 50)
         }
       }
@@ -477,4 +478,5 @@ function LogoIcon() {
     </svg>
   )
 }
+
 
