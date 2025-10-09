@@ -33,3 +33,4 @@ export const supabase =
   })
 
 if (!globalForSupabase._sb) globalForSupabase._sb = supabase
+
