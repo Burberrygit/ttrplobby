@@ -478,3 +478,4 @@ function LogoIcon() {
     </svg>
   )
 }
+
