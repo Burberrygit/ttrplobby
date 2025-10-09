@@ -97,12 +97,12 @@ export default function ApplyPage() {
       try {
         const { data, error } = await supabase
           .from('games')
-          .select('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone,status,length_min,description,vibe')
+          .select<Game>('id,title,system,poster_url,scheduled_at,seats,welcomes_new,is_mature,time_zone,status,length_min,description,vibe')
           .eq('id', id)
           .single()
         if (cancelled) return
         if (error) throw error
-        setGame(data as Game)
+        setGame(data)
       } catch (e: any) {
         setErrorMsg(e?.message || 'Game not found')
       } finally {
@@ -478,7 +478,3 @@ function LogoIcon() {
     </svg>
   )
 }
-
-
-
-
