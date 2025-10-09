@@ -54,25 +54,31 @@ export default function ApplicationDetailPage() {
     ;(async () => {
       try {
         setLoading(true)
-        const { data: g, error: gErr } = await supabase
+        const { data: gData, error: gErr } = await supabase
           .from('games')
           .select('*')
           .eq('id', id)
-          .returns<Game>()
           .single()
         if (gErr) throw gErr
-        if (!g) throw new Error('Game not found.')
+        if (!gData) throw new Error('Game not found.')
+
+        // Explicit narrow cast so TS never infers `never` here, even if the client isn't typed in CI.
+        const g = gData as unknown as Game
+
         if (g.host_id !== me.id) throw new Error('You are not the host of this game.')
         setGame(g)
 
-        const { data: a, error: aErr } = await supabase
+        const { data: aData, error: aErr } = await supabase
           .from('applications')
           .select('*')
           .eq('id', appId)
-          .returns<Application>()
           .single()
         if (aErr) throw aErr
-        if (!a) throw new Error('Application not found.')
+        if (!aData) throw new Error('Application not found.')
+
+        // Narrow cast for Application as well
+        const a = aData as unknown as Application
+
         if (a.listing_id !== id) throw new Error('Application does not belong to this game.')
         setApp(a)
       } catch (e: any) {
